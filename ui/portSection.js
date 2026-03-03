@@ -183,6 +183,22 @@ function _buildPortRow(record, onKill) {
     row.add_child(projLabel);
     row.add_child(runtimeLabel);
 
+    // ── Copy PID button ────────────────────────────────────────────────────
+    if (record.pid) {
+        const copyBtn = new St.Button({
+            label: '⧉',
+            style_class: 'devwatch-copy-button',
+            y_align: Clutter.ActorAlign.CENTER,
+            reactive: true,
+            can_focus: true,
+            track_hover: true,
+        });
+        copyBtn.connect('clicked', () => {
+            St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, String(record.pid));
+        });
+        row.add_child(copyBtn);
+    }
+
     // ── Kill button (only when PID is known) ───────────────────────────────
     if (record.pid && typeof onKill === 'function') {
         const killBtn = new St.Button({

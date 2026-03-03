@@ -147,3 +147,20 @@
 .devwatch-project-link {
     color: #57e389;
 }
+
+/* ── One-click actions ─────────────────────────────────────────────────────── */
+
+.devwatch-copy-button {
+    color: #888888;
+    font-size: 12px;
+    padding: 0 5px;
+}
+
+.devwatch-copy-button:hover {
+    color: #78aeed;
+}
+
+.devwatch-open-terminal-item {
+    color: #78aeed;
+    font-size: 11px;
+}

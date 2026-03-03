@@ -20,6 +20,7 @@
  *     Removes all project section items from the menu.
  */
 
+import Gio from 'gi://Gio';
 import St from 'gi://St';
 import Clutter from 'gi://Clutter';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
@@ -154,6 +155,14 @@ function _buildProjectRow(project) {
         subMenu.menu.addMenuItem(moreItem);
     }
 
+    // ── Project actions ────────────────────────────────────────────────────
+    subMenu.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+
+    const termItem = new PopupMenu.PopupMenuItem('⎋  Open terminal here');
+    termItem.label.style_class = 'devwatch-open-terminal-item';
+    termItem.connect('activate', () => _openTerminalAt(project.root));
+    subMenu.menu.addMenuItem(termItem);
+
     return subMenu;
 }
 
@@ -205,6 +214,20 @@ function _buildProcessRow(proc) {
     box.add_child(stateLabel);
     box.add_child(cpuLabel);
     box.add_child(ramLabel);
+
+    // Copy PID button
+    const copyBtn = new St.Button({
+        label: '⧉',
+        style_class: 'devwatch-copy-button',
+        y_align: Clutter.ActorAlign.CENTER,
+        reactive: true,
+        can_focus: true,
+        track_hover: true,
+    });
+    copyBtn.connect('clicked', () => {
+        St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, String(proc.pid));
+    });
+    box.add_child(copyBtn);
 
     item.add_child(box);
     item.label.hide(); // hide the default empty label
@@ -265,4 +288,28 @@ function _stateDisplay(state) {
 function _stateClass(state) {
     const map = { R: 'running', S: 'sleeping', D: 'waiting', Z: 'zombie', T: 'stopped' };
     return map[state] ?? 'unknown';
+}
+
+/**
+ * Launch a terminal emulator at the given directory path.
+ * Tries gnome-terminal first (Ubuntu default), then xterm as a fallback.
+ *
+ * @param {string} root  Absolute path to open the terminal in.
+ */
+function _openTerminalAt(root) {
+    const launcher = new Gio.SubprocessLauncher({
+        flags: Gio.SubprocessFlags.NONE,
+    });
+    launcher.set_cwd(root);
+
+    for (const argv of [
+        ['gnome-terminal'],
+        ['xterm'],
+    ]) {
+        try {
+            launcher.spawnv(argv);
+            return;
+        } catch (_) { /* try next candidate */ }
+    }
+    console.warn('[DevWatch] _openTerminalAt: no suitable terminal found for', root);
 }

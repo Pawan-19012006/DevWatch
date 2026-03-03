@@ -197,8 +197,13 @@ Use [GitHub Issues](https://github.com/Adithya-Balan/DevWatch/issues). Include:
 
 ## Roadmap
 
-- [x] Scaffold: Panel button + dropdown
-- [ ] Pillar 1: Project-aware process intelligence
+- [x] Scaffold: Panel button + dropdown (Step 1)
+- [x] `utils/subprocess.js` — async CLI helper (Step 2)
+- [x] `utils/procReader.js` — `/proc` filesystem helpers (Step 3)
+- [x] `core/projectDetector.js` — focus-window → git root detection (Step 4)
+- [x] `core/processTracker.js` — `/proc` scan with project-grouped CPU/RAM (Step 5)
+- [x] `ui/projectSection.js` — Active Projects dropdown renderer (Step 6)
+- [x] **Pillar 1 complete** — Live project-aware process intelligence (Step 7)
 - [ ] Pillar 2: Port monitoring + conflict detection
 - [ ] Pillar 3: Dev environment cleanup engine
 - [ ] Pillar 4: Session snapshot & restore

@@ -1,0 +1,75 @@
+/* ───────────────────────────────────────────────────────────────────────
+ * DevWatch — stylesheet.css
+ * St widget styling for GNOME Shell
+ * ─────────────────────────────────────────────────────────────────────── */
+
+/* ── Panel bar ─────────────────────────────────────────────────────────── */
+
+.devwatch-panel-box {
+    spacing: 4px;
+}
+
+.devwatch-panel-label {
+    font-size: 12px;
+}
+
+/* Status dot colours — controlled by swapping CSS class in JS */
+.devwatch-dot {
+    font-size: 10px;
+    padding-right: 2px;
+}
+
+.devwatch-dot-green {
+    color: #57e389;   /* GNOME green */
+}
+
+.devwatch-dot-yellow {
+    color: #f8e45c;   /* GNOME yellow */
+}
+
+.devwatch-dot-red {
+    color: #ed333b;   /* GNOME red */
+}
+
+/* ── Dropdown menu ─────────────────────────────────────────────────────── */
+
+.devwatch-menu-header {
+    font-weight: bold;
+    font-size: 13px;
+}
+
+.devwatch-section-title {
+    font-weight: bold;
+    font-size: 11px;
+    color: #aaaaaa;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.devwatch-dim {
+    color: #888888;
+    font-size: 11px;
+    font-style: italic;
+}
+
+.devwatch-project-name {
+    font-weight: bold;
+    font-size: 12px;
+}
+
+.devwatch-port-number {
+    font-weight: bold;
+    font-size: 12px;
+    color: #78aeed;
+}
+
+.devwatch-meta {
+    font-size: 11px;
+    color: #aaaaaa;
+}
+
+.devwatch-kill-button {
+    color: #ed333b;
+    font-size: 11px;
+    padding: 0 6px;
+}

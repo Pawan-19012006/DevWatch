@@ -9,6 +9,16 @@
  *   • buildProjectSection — renders live data into the dropdown
  *   • GLib.timeout polling (every 10s) + on-open refresh
  *   • All resources strictly cleaned up in disable()
+ *
+ * Pillar 2 — fully wired:
+ *   • PortMonitor     — ss -tulnp, dev-port set, runtime tracking
+ *   • ConflictNotifier — Main.notify on newly occupied dev ports
+ *   • buildPortSection — Kill / Copy PID per port row
+ *
+ * Pillar 3 — fully wired:
+ *   • CleanupEngine   — zombie / orphan / idle-dev detection
+ *   • buildCleanupSection — Clean All + per-candidate Kill
+ *   • Status dot: red on zombie OR port conflict, yellow on orphan/idle/highCPU
  */
 
 import GLib from 'gi://GLib';
@@ -25,8 +35,10 @@ import { ProjectDetector }    from './core/projectDetector.js';
 import { ProcessTracker }     from './core/processTracker.js';
 import { PortMonitor }        from './core/portMonitor.js';
 import { ConflictNotifier }   from './core/conflictNotifier.js';
-import { buildProjectSection } from './ui/projectSection.js';
-import { buildPortSection }   from './ui/portSection.js';
+import { CleanupEngine }      from './core/cleanupEngine.js';
+import { buildProjectSection }  from './ui/projectSection.js';
+import { buildPortSection }     from './ui/portSection.js';
+import { buildCleanupSection }  from './ui/cleanupSection.js';
 
 /** Background poll interval in seconds */
 const POLL_INTERVAL_S = 10;
@@ -45,6 +57,7 @@ export default class DevWatchExtension extends Extension {
         this._processTracker    = new ProcessTracker();
         this._portMonitor       = new PortMonitor();
         this._conflictNotifier  = new ConflictNotifier();
+        this._cleanupEngine     = new CleanupEngine();
 
         this._projectDetector.onProjectChanged(_info => {
             // React immediately when the focused project changes
@@ -135,6 +148,9 @@ export default class DevWatchExtension extends Extension {
         this._conflictNotifier?.destroy();
         this._conflictNotifier = null;
 
+        this._cleanupEngine?.destroy();
+        this._cleanupEngine = null;
+
         // Cancel all in-flight async operations
         this._cancellable?.cancel();
         this._cancellable = null;
@@ -186,16 +202,29 @@ export default class DevWatchExtension extends Extension {
         this._conflictNotifier?.pruneNotified(activePids);
         this._conflictNotifier?.notify(portResult.newPorts);
 
-        // Rebuild both sections
+        // Run cleanup analysis
+        const portPids = new Set(
+            (portResult.ports ?? []).filter(r => r.pid).map(r => r.pid)
+        );
+        const cleanupResult = this._cleanupEngine
+            ? this._cleanupEngine.analyse(projectMap, portPids)
+            : { candidates: [], scannedAt: 0 };
+
+        // Rebuild all three sections
         buildProjectSection(this._indicator.menu, projectMap);
         buildPortSection(
             this._indicator.menu,
             portResult,
             (pid, port) => this._killProcess(pid, port)
         );
+        buildCleanupSection(
+            this._indicator.menu,
+            cleanupResult,
+            pid => this._killProcess(pid, null)
+        );
 
         // Update status dot colour
-        this._updateStatusDot(projectMap, portResult);
+        this._updateStatusDot(projectMap, portResult, cleanupResult);
     }
 
     /**
@@ -249,28 +278,32 @@ export default class DevWatchExtension extends Extension {
     /**
      * Update the panel status dot colour based on overall dev health.
      *
+     * Red    — zombie process OR newly conflicting port OR orphan process
+     * Yellow — high CPU (>80%) OR idle dev tool detected
      * Green  — all clear
-     * Yellow — any project exceeds 80% aggregate CPU
-     * Red    — any zombie process OR newly conflicting port detected
      *
      * @param {Map<string, object>} projectMap
      * @param {{ ports: object[], newPorts: object[] }} portResult
+     * @param {{ candidates: object[] }} cleanupResult
      */
-    _updateStatusDot(projectMap, portResult = { ports: [], newPorts: [] }) {
+    _updateStatusDot(
+        projectMap,
+        portResult     = { ports: [], newPorts: [] },
+        cleanupResult  = { candidates: [] }
+    ) {
         if (!this._statusDot) return;
 
-        let dotClass = 'devwatch-dot-green';
-
-        const hasZombie = projectMap && [...projectMap.values()].some(p =>
-            p.processes.some(proc => proc.state === 'Z')
-        );
+        const hasZombie   = cleanupResult.candidates.some(c => c.reason === 'zombie');
+        const hasOrphan   = cleanupResult.candidates.some(c => c.reason === 'orphan');
         const hasConflict = portResult.newPorts?.length > 0;
-        const highCpu = projectMap && [...projectMap.values()].some(p =>
+        const hasIdle     = cleanupResult.candidates.some(c => c.reason === 'idle_dev');
+        const highCpu     = projectMap && [...projectMap.values()].some(p =>
             p.totalCpuPercent > 80
         );
 
-        if (hasZombie || hasConflict) dotClass = 'devwatch-dot-red';
-        else if (highCpu)             dotClass = 'devwatch-dot-yellow';
+        let dotClass = 'devwatch-dot-green';
+        if (hasZombie || hasOrphan || hasConflict) dotClass = 'devwatch-dot-red';
+        else if (highCpu || hasIdle)               dotClass = 'devwatch-dot-yellow';
 
         this._statusDot.style_class = `devwatch-dot ${dotClass}`;
     }

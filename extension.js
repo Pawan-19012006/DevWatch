@@ -23,6 +23,11 @@
  * Pillar 4 — fully wired:
  *   • SnapshotManager  — save/list/load/restore/delete session JSON
  *   • buildSnapshotSection — Save Now, Restore, Delete per snapshot row
+ *
+ * Pillar 5 — fully wired:
+ *   • BuildDetector    — active build tracking + persisted run history
+ *   • buildPerfSection — active builds + recent-build history rows
+ *   • Status dot: red if active build pushing CPU >90%
  */
 
 import GLib from 'gi://GLib';
@@ -45,6 +50,8 @@ import { buildProjectSection }  from './ui/projectSection.js';
 import { buildPortSection }     from './ui/portSection.js';
 import { buildCleanupSection }  from './ui/cleanupSection.js';
 import { buildSnapshotSection } from './ui/snapshotSection.js';
+import { BuildDetector }         from './core/buildDetector.js';
+import { buildPerfSection }      from './ui/perfSection.js';
 
 /** Background poll interval in seconds */
 const POLL_INTERVAL_S = 10;
@@ -65,6 +72,7 @@ export default class DevWatchExtension extends Extension {
         this._conflictNotifier  = new ConflictNotifier();
         this._cleanupEngine     = new CleanupEngine();
         this._snapshotManager   = new SnapshotManager();
+        this._buildDetector     = new BuildDetector();
 
         /** Cached from last _refresh() — used by Save Now button. */
         this._lastProjectMap  = null;
@@ -81,6 +89,7 @@ export default class DevWatchExtension extends Extension {
         this._processTracker.start(this._cancellable);
         this._portMonitor.start(this._cancellable);
         this._snapshotManager.start(this._cancellable);
+        this._buildDetector.start(this._cancellable);
 
         // ── Panel Indicator ────────────────────────────────────────────
         this._indicator = new PanelMenu.Button(0.0, this.metadata.name, false);
@@ -171,6 +180,9 @@ export default class DevWatchExtension extends Extension {
         this._lastPortResult  = null;
         this._snapshots       = null;
 
+        this._buildDetector?.destroy();
+        this._buildDetector = null;
+
         // Cancel all in-flight async operations
         this._cancellable?.cancel();
         this._cancellable = null;
@@ -243,7 +255,12 @@ export default class DevWatchExtension extends Extension {
             ? this._cleanupEngine.analyse(projectMap, portPids)
             : { candidates: [], scannedAt: 0 };
 
-        // Rebuild all four sections
+        // Run build detection
+        const buildResult = this._buildDetector
+            ? this._buildDetector.analyse(projectMap)
+            : { active: [], history: new Map() };
+
+        // Rebuild all five sections
         buildProjectSection(this._indicator.menu, projectMap);
         buildPortSection(
             this._indicator.menu,
@@ -264,9 +281,10 @@ export default class DevWatchExtension extends Extension {
                 onDelete:  fn  => this._deleteSnapshot(fn),
             }
         );
+        buildPerfSection(this._indicator.menu, buildResult);
 
         // Update status dot colour
-        this._updateStatusDot(projectMap, portResult, cleanupResult);
+        this._updateStatusDot(projectMap, portResult, cleanupResult, buildResult);
     }
 
     /**
@@ -366,21 +384,24 @@ export default class DevWatchExtension extends Extension {
     _updateStatusDot(
         projectMap,
         portResult     = { ports: [], newPorts: [] },
-        cleanupResult  = { candidates: [] }
+        cleanupResult  = { candidates: [] },
+        buildResult    = { active: [], history: new Map() }
     ) {
         if (!this._statusDot) return;
 
-        const hasZombie   = cleanupResult.candidates.some(c => c.reason === 'zombie');
-        const hasOrphan   = cleanupResult.candidates.some(c => c.reason === 'orphan');
-        const hasConflict = portResult.newPorts?.length > 0;
-        const hasIdle     = cleanupResult.candidates.some(c => c.reason === 'idle_dev');
-        const highCpu     = projectMap && [...projectMap.values()].some(p =>
+        const hasZombie    = cleanupResult.candidates.some(c => c.reason === 'zombie');
+        const hasOrphan    = cleanupResult.candidates.some(c => c.reason === 'orphan');
+        const hasConflict  = portResult.newPorts?.length > 0;
+        const hasIdle      = cleanupResult.candidates.some(c => c.reason === 'idle_dev');
+        const highCpu      = projectMap && [...projectMap.values()].some(p =>
             p.totalCpuPercent > 80
         );
+        // A build hammering the CPU signals active work (yellow — not an error)
+        const buildingHot  = buildResult.active?.some(r => r.peakCpuPct > 90);
 
         let dotClass = 'devwatch-dot-green';
         if (hasZombie || hasOrphan || hasConflict) dotClass = 'devwatch-dot-red';
-        else if (highCpu || hasIdle)               dotClass = 'devwatch-dot-yellow';
+        else if (highCpu || hasIdle || buildingHot) dotClass = 'devwatch-dot-yellow';
 
         this._statusDot.style_class = `devwatch-dot ${dotClass}`;
     }

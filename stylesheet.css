@@ -316,3 +316,13 @@
     letter-spacing: 1px;
     padding-top: 4px;
 }
+
+.devwatch-refresh-icon {
+    icon-size: 16px;
+    color: #888888;
+    padding: 2px;
+}
+
+.devwatch-refresh-icon:hover {
+    color: #ffffff;
+}

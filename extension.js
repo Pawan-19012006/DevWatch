@@ -409,10 +409,17 @@ export default class DevWatchExtension extends Extension {
         // Active Ports — populated dynamically by buildPortSection() on each refresh
         // (No static placeholder needed — buildPortSection shows its own empty state)
 
-        // Footer
-        menu.addAction(_('Refresh Now'), () => {
+        // Footer — icon-only refresh button
+        const refreshItem = new PopupMenu.PopupBaseMenuItem({ reactive: true });
+        const refreshIcon = new St.Icon({
+            icon_name: 'view-refresh-symbolic',
+            style_class: 'devwatch-refresh-icon',
+        });
+        refreshItem.add_child(refreshIcon);
+        refreshItem.connect('activate', () => {
             this._refresh().catch(e => this._logError(e));
         });
+        menu.addMenuItem(refreshItem);
     }
 
     /**

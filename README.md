@@ -62,6 +62,14 @@ DevWatch fills that gap by mapping running system processes back to your develop
 - Panel shows active build row with live CPU%, completed builds with duration + peak resources
 - Status dot turns **yellow** when an active build is pushing CPU above 90%
 
+### Preferences ✅
+- Full GTK4 / libadwaita preferences window (accessible via GNOME Settings → Extensions → DevWatch → ⚙)
+- **General** — background poll interval (5–60 s, live-applied without reload)
+- **Ports** — toggle system-port visibility; enable/disable conflict notifications
+- **Cleanup** — configure idle-dev detection threshold (1–60 min)
+- **Performance** — set max build history rows shown in the panel (1–20)
+- All settings persist in GSettings (`org.gnome.shell.extensions.devwatch`)
+
 ---
 
 ## Design Principles
@@ -119,9 +127,12 @@ You should see `● DevWatch` appear in the top-right panel area.
 ```
 DevWatch/
 ├── extension.js          ← Entry point (ESM, GNOME 45+)
+├── prefs.js              ← GTK4/Adw preferences window
 ├── metadata.json         ← Extension identity & GNOME version compatibility
 ├── stylesheet.css        ← St widget CSS
 ├── Makefile              ← Dev helpers (link, enable, log, nested)
+├── schemas/
+│   └── org.gnome.shell.extensions.devwatch.gschema.xml  ← GSettings schema
 ├── ui/
 │   ├── projectSection.js ← Active Projects section (process rows + Open Terminal)
 │   ├── portSection.js    ← Active Ports section (Kill + Copy PID buttons)
@@ -144,13 +155,14 @@ DevWatch/
 ### Makefile Targets
 
 ```bash
-make link     # Symlink project files into GNOME extension dir (run after adding files)
-make enable   # Enable the extension
-make disable  # Disable the extension
-make pack     # Build distributable .zip
-make log      # Tail GNOME Shell logs (your console.log() appears here)
-make nested   # Launch a nested Wayland GNOME session for safe testing
-make status   # Show gnome-extensions info
+make link              # Symlink project files into GNOME extension dir (run after adding files)
+make compile-schemas   # Compile GSettings schema (auto-run by make link)
+make enable            # Enable the extension
+make disable           # Disable the extension
+make pack              # Build distributable .zip
+make log               # Tail GNOME Shell logs (your console.log() appears here)
+make nested            # Launch a nested Wayland GNOME session for safe testing
+make status            # Show gnome-extensions info
 ```
 
 ### Viewing Logs
@@ -230,7 +242,10 @@ Use [GitHub Issues](https://github.com/Adithya-Balan/DevWatch/issues). Include:
 - [x] `ui/perfSection.js` — Build Performance renderer: active builds + history rows (Step 22)
 - [x] Pillar 5 wired into extension.js + status dot updated (Step 23)
 - [x] **Pillar 5 complete** — Dev build performance intelligence (Step 24)
-- [ ] Preferences UI (`prefs.js`)
+- [x] `schemas/org.gnome.shell.extensions.devwatch.gschema.xml` — GSettings schema (Step 25)
+- [x] `prefs.js` — GTK4/Adw preferences window with 4 pages (Step 26)
+- [x] GSettings wired into all modules — live poll-interval, idle threshold, notify toggle, system-ports toggle, history cap (Step 27)
+- [x] **Preferences complete** — user-configurable settings (Step 28)
 - [ ] i18n / translations
 - [ ] extensions.gnome.org submission
 

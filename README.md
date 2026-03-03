@@ -55,9 +55,12 @@ DevWatch fills that gap by mapping running system processes back to your develop
 - Snapshot list in the panel dropdown — up to 5 shown, max 20 kept on disk
 - Per-snapshot **Delete** button; auto-prunes oldest when limit is reached
 
-### Pillar 5 — Dev Performance Intelligence
+### Pillar 5 — Dev Performance Intelligence ✅
 - Detects active builds (`npm`, `cargo`, `make`, `gradle`, `go build`, …)
 - Records peak CPU/RAM per build, trends over the last 5 runs
+- Persists build history across reloads in `~/.local/share/devwatch/build_history.json`
+- Panel shows active build row with live CPU%, completed builds with duration + peak resources
+- Status dot turns **yellow** when an active build is pushing CPU above 90%
 
 ---
 
@@ -124,7 +127,7 @@ DevWatch/
 │   ├── portSection.js    ← Active Ports section (Kill + Copy PID buttons)
 │   ├── cleanupSection.js ← Cleanup Candidates section (Clean All + Kill per row)
 │   ├── snapshotSection.js← Session Snapshot: Save Now, Restore, Delete rows
-│   └── perfSection.js    ← Performance Summary         (Pillar 5 — planned)
+│   └── perfSection.js    ← Build Performance: active builds + run history (Pillar 5)
 ├── core/
 │   ├── projectDetector.js← Git root + window focus tracking
 │   ├── processTracker.js ← /proc traversal, process→project mapping
@@ -132,7 +135,7 @@ DevWatch/
 │   ├── conflictNotifier.js ← GNOME notifications for newly occupied dev ports
 │   ├── cleanupEngine.js  ← Zombie / orphan / idle-dev detection + candidate scoring
 │   ├── snapshotManager.js← Save/list/load/restore/delete session JSON snapshots
-│   └── buildDetector.js  ← Build detection + resource spike recording (Pillar 5 — planned)
+│   └── buildDetector.js  ← Build detection + peak CPU/RAM tracking + persisted history
 └── utils/
     ├── subprocess.js     ← Async execCommunicate() helper
     └── procReader.js     ← /proc file read helpers
@@ -223,7 +226,10 @@ Use [GitHub Issues](https://github.com/Adithya-Balan/DevWatch/issues). Include:
 - [x] `ui/snapshotSection.js` — Save Now, Restore & Delete per snapshot row (Step 18)
 - [x] Pillar 4 wired into extension.js (Step 19)
 - [x] **Pillar 4 complete** — Dev session snapshot & restore (Step 20)
-- [ ] Pillar 5: Build performance intelligence
+- [x] `core/buildDetector.js` — active build tracking + persisted run history (Step 21)
+- [x] `ui/perfSection.js` — Build Performance renderer: active builds + history rows (Step 22)
+- [x] Pillar 5 wired into extension.js + status dot updated (Step 23)
+- [x] **Pillar 5 complete** — Dev build performance intelligence (Step 24)
 - [ ] Preferences UI (`prefs.js`)
 - [ ] i18n / translations
 - [ ] extensions.gnome.org submission

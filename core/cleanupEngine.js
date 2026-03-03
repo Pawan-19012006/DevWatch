@@ -14,7 +14,7 @@
  *              AND whose CWD cannot be mapped to any active project.
  *
  *   IDLE_DEV — a long-running dev process that has been at ~0 % CPU for
- *              more than IDLE_THRESHOLD_MS without any network port binding.
+ *              more than the configured idle threshold without any network port binding.
  *              Typical case: a `nodemon` watch server for an old project that
  *              was never stopped after development ended.
  *
@@ -67,12 +67,7 @@ const DEV_TOOL_NAMES = new Set([
 ]);
 
 /**
- * Milliseconds of near-zero CPU before a dev process is considered idle.
- * Default: 10 minutes.
- */
-const IDLE_THRESHOLD_MS = 10 * 60 * 1000;
 
-/**
  * CPU % below which a process is considered idle (accounts for measurement
  * noise at low poll intervals).
  */
@@ -112,7 +107,8 @@ export class CleanupEngine {
      *
      * @returns {import('./cleanupEngine.js').CleanupResult}
      */
-    analyse(projectMap, portPids = new Set()) {
+    analyse(projectMap, portPids = new Set(), idleThresholdMinutes = 10) {
+        const idleThresholdMs = idleThresholdMinutes * 60 * 1000;
         this._portOwners = portPids;
 
         /** @type {CleanupCandidate[]} */
@@ -166,7 +162,7 @@ export class CleanupEngine {
             }
 
             // ── Idle dev process ─────────────────────────────────────────────
-            // A dev tool that has been at near-zero CPU for IDLE_THRESHOLD_MS
+            // A dev tool that has been at near-zero CPU for the idle threshold duration
             // and does NOT own an active listening port.
             if (isDevTool && !portPids.has(proc.pid)) {
                 if (proc.cpuPercent < IDLE_CPU_THRESHOLD) {
@@ -176,7 +172,7 @@ export class CleanupEngine {
                     }
 
                     const idleMs = (now - this._idleSince.get(proc.pid)) / 1000;
-                    if (idleMs >= IDLE_THRESHOLD_MS) {
+                    if (idleMs >= idleThresholdMs) {
                         const idleMin = Math.round(idleMs / 60_000);
                         candidates.push({
                             pid:         proc.pid,

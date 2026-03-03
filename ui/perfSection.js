@@ -34,8 +34,8 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 const SECTION_TAG = 'devwatch-perf';
 
-/** Max history rows shown across all projects. */
-const MAX_HISTORY_ROWS = 8;
+/** Default max history rows — overridden by the maxRows parameter. */
+const DEFAULT_MAX_HISTORY_ROWS = 8;
 
 // ── Public API ─────────────────────────────────────────────────────────────────
 
@@ -44,8 +44,9 @@ const MAX_HISTORY_ROWS = 8;
  *
  * @param {PopupMenu.PopupMenu} menu
  * @param {import('../core/buildDetector.js').BuildResult} buildResult
+ * @param {number} [maxRows=8]  From user preferences (max-build-history).
  */
-export function buildPerfSection(menu, buildResult) {
+export function buildPerfSection(menu, buildResult, maxRows = DEFAULT_MAX_HISTORY_ROWS) {
     clearPerfSection(menu);
 
     const active  = buildResult?.active  ?? [];
@@ -74,7 +75,7 @@ export function buildPerfSection(menu, buildResult) {
     }
     // Sort by startedAt descending (largest = most recent)
     historyRuns.sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0));
-    const shown = historyRuns.slice(0, MAX_HISTORY_ROWS);
+    const shown = historyRuns.slice(0, maxRows);
 
     if (shown.length > 0) {
         if (active.length > 0) {
@@ -91,9 +92,9 @@ export function buildPerfSection(menu, buildResult) {
             menu.addMenuItem(item);
         }
 
-        if (historyRuns.length > MAX_HISTORY_ROWS) {
+        if (historyRuns.length > maxRows) {
             const more = new PopupMenu.PopupMenuItem(
-                `  … and ${historyRuns.length - MAX_HISTORY_ROWS} older runs`,
+                `  … and ${historyRuns.length - maxRows} older runs`,
                 { reactive: false }
             );
             more.label.style_class = 'devwatch-dim';

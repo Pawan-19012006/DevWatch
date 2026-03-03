@@ -53,8 +53,8 @@ import { buildSnapshotSection } from './ui/snapshotSection.js';
 import { BuildDetector }         from './core/buildDetector.js';
 import { buildPerfSection }      from './ui/perfSection.js';
 
-/** Background poll interval in seconds */
-const POLL_INTERVAL_S = 10;
+/** Fallback poll interval — used before settings load (should never be needed). */
+const DEFAULT_POLL_INTERVAL_S = 10;
 
 export default class DevWatchExtension extends Extension {
     constructor(metadata) {
@@ -73,6 +73,14 @@ export default class DevWatchExtension extends Extension {
         this._cleanupEngine     = new CleanupEngine();
         this._snapshotManager   = new SnapshotManager();
         this._buildDetector     = new BuildDetector();
+
+        // ── GSettings ─────────────────────────────────────────────────
+        this._settings = this.getSettings();
+        // Restart the poll timer live when the user changes the interval
+        this._settingsChangedId = this._settings.connect(
+            'changed::poll-interval',
+            () => this._restartPollTimer()
+        );
 
         /** Cached from last _refresh() — used by Save Now button. */
         this._lastProjectMap  = null;
@@ -129,7 +137,7 @@ export default class DevWatchExtension extends Extension {
         // ── Background poll ────────────────────────────────────────────
         this._pollId = GLib.timeout_add_seconds(
             GLib.PRIORITY_DEFAULT,
-            POLL_INTERVAL_S,
+            this._settings.get_int('poll-interval'),
             () => {
                 this._refresh().catch(e => this._logError(e));
                 return GLib.SOURCE_CONTINUE;
@@ -142,7 +150,8 @@ export default class DevWatchExtension extends Extension {
         // Initial data load
         this._refresh().catch(e => this._logError(e));
 
-        console.log('[DevWatch] Enabled — polling every', POLL_INTERVAL_S, 's');
+        console.log('[DevWatch] Enabled — polling every',
+            this._settings.get_int('poll-interval'), 's');
     }
 
     disable() {
@@ -182,6 +191,13 @@ export default class DevWatchExtension extends Extension {
 
         this._buildDetector?.destroy();
         this._buildDetector = null;
+
+        // Disconnect GSettings watcher
+        if (this._settingsChangedId !== null && this._settingsChangedId !== undefined) {
+            this._settings?.disconnect(this._settingsChangedId);
+            this._settingsChangedId = null;
+        }
+        this._settings = null;
 
         // Cancel all in-flight async operations
         this._cancellable?.cancel();
@@ -241,18 +257,20 @@ export default class DevWatchExtension extends Extension {
         if (!this._indicator) return;
 
         // Fire conflict notifications for newly occupied dev ports
+        const notifyEnabled = this._settings?.get_boolean('notify-port-conflicts') ?? true;
         const activePids = new Set(
             [...projectMap.values()].flatMap(p => p.processes.map(pr => pr.pid))
         );
         this._conflictNotifier?.pruneNotified(activePids);
-        this._conflictNotifier?.notify(portResult.newPorts);
+        this._conflictNotifier?.notify(portResult.newPorts, notifyEnabled);
 
         // Run cleanup analysis
+        const idleThresholdMinutes = this._settings?.get_int('idle-threshold-minutes') ?? 10;
         const portPids = new Set(
             (portResult.ports ?? []).filter(r => r.pid).map(r => r.pid)
         );
         const cleanupResult = this._cleanupEngine
-            ? this._cleanupEngine.analyse(projectMap, portPids)
+            ? this._cleanupEngine.analyse(projectMap, portPids, idleThresholdMinutes)
             : { candidates: [], scannedAt: 0 };
 
         // Run build detection
@@ -260,12 +278,17 @@ export default class DevWatchExtension extends Extension {
             ? this._buildDetector.analyse(projectMap)
             : { active: [], history: new Map() };
 
+        // Read remaining display preferences
+        const showSystemPorts  = this._settings?.get_boolean('show-system-ports') ?? false;
+        const maxBuildHistory  = this._settings?.get_int('max-build-history') ?? 8;
+
         // Rebuild all five sections
         buildProjectSection(this._indicator.menu, projectMap);
         buildPortSection(
             this._indicator.menu,
             portResult,
-            (pid, port) => this._killProcess(pid, port)
+            (pid, port) => this._killProcess(pid, port),
+            showSystemPorts
         );
         buildCleanupSection(
             this._indicator.menu,
@@ -281,10 +304,31 @@ export default class DevWatchExtension extends Extension {
                 onDelete:  fn  => this._deleteSnapshot(fn),
             }
         );
-        buildPerfSection(this._indicator.menu, buildResult);
+        buildPerfSection(this._indicator.menu, buildResult, maxBuildHistory);
 
         // Update status dot colour
         this._updateStatusDot(projectMap, portResult, cleanupResult, buildResult);
+    }
+
+    /**
+     * Restart the background poll timer with the current poll-interval setting.
+     * Called live when the user changes the setting in Preferences.
+     */
+    _restartPollTimer() {
+        if (this._pollId !== null) {
+            GLib.Source.remove(this._pollId);
+            this._pollId = null;
+        }
+        const interval = this._settings?.get_int('poll-interval') ?? DEFAULT_POLL_INTERVAL_S;
+        this._pollId = GLib.timeout_add_seconds(
+            GLib.PRIORITY_DEFAULT,
+            interval,
+            () => {
+                this._refresh().catch(e => this._logError(e));
+                return GLib.SOURCE_CONTINUE;
+            }
+        );
+        console.log('[DevWatch] Poll interval changed to', interval, 's');
     }
 
     /**

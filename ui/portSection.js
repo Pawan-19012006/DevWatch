@@ -39,8 +39,10 @@ const MAX_PORTS_SHOWN = 20;
  * @param {import('../core/portMonitor.js').PortScanResult} scanResult
  * @param {(pid: number, port: number) => void} onKill
  *   Callback invoked when the user clicks Kill on a port row.
+ * @param {boolean} [showSystemPorts=false]
+ *   When false (default), only dev ports are rendered; system ports are hidden.
  */
-export function buildPortSection(menu, scanResult, onKill) {
+export function buildPortSection(menu, scanResult, onKill, showSystemPorts = false) {
     clearPortSection(menu);
 
     // ── Section title ──────────────────────────────────────────────────────
@@ -65,7 +67,10 @@ export function buildPortSection(menu, scanResult, onKill) {
 
     // Separate dev ports from system ports, sort each group by port number
     const devPorts = ports.filter(p => p.isDevPort).sort((a, b) => a.port - b.port);
-    const sysPorts = ports.filter(p => !p.isDevPort).sort((a, b) => a.port - b.port);
+    // System ports are hidden by default (showSystemPorts pref controls visibility)
+    const sysPorts = showSystemPorts
+        ? ports.filter(p => !p.isDevPort).sort((a, b) => a.port - b.port)
+        : [];
 
     // Show dev ports first, then system ports (up to MAX_PORTS_SHOWN total)
     const ordered = [...devPorts, ...sysPorts].slice(0, MAX_PORTS_SHOWN);

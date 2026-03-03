@@ -28,8 +28,10 @@ export class ConflictNotifier {
      *
      * @param {import('./portMonitor.js').PortRecord[]} newPorts
      *   Ports that were absent in the previous scan cycle and are now present.
+     * @param {boolean} [enabled=true]  Set to false to suppress all notifications (user pref).
      */
-    notify(newPorts) {
+    notify(newPorts, enabled = true) {
+        if (!enabled) return;
         for (const rec of newPorts) {
             if (!rec.isDevPort) continue; // only notify for recognised dev ports
 

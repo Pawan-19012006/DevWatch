@@ -271,3 +271,48 @@
 .devwatch-snapshot-delete-button:hover {
     color: #ed333b;
 }
+
+/* ── Pillar 5 — Build Performance ───────────────────────────────────────── */
+
+.devwatch-perf-row {
+    padding: 2px 0;
+    spacing: 6px;
+}
+
+.devwatch-perf-active-icon {
+    color: #f5c211;         /* amber gear — in-progress */
+    font-size: 14px;
+    width: 18px;
+}
+
+.devwatch-perf-tool {
+    font-size: 12px;
+    font-weight: bold;
+    color: #ffffff;
+}
+
+.devwatch-perf-cpu-active {
+    font-size: 11px;
+    color: #ff7800;         /* orange — live CPU */
+    font-weight: bold;
+}
+
+.devwatch-perf-icon-ok {
+    color: #57e389;         /* green check */
+    font-size: 12px;
+    width: 18px;
+}
+
+.devwatch-perf-icon-short {
+    color: #888888;         /* grey cross — very short / failed */
+    font-size: 12px;
+    width: 18px;
+}
+
+.devwatch-perf-history-header {
+    font-size: 10px;
+    color: #888888;
+    font-weight: bold;
+    letter-spacing: 1px;
+    padding-top: 4px;
+}

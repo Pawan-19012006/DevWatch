@@ -63,11 +63,13 @@ log:
 status:
 	gnome-extensions info $(UUID)
 
-# Launch a nested Wayland GNOME Shell for safe testing (GNOME 48-)
-# Use --devkit instead of --nested for GNOME 49+
+# Launch a nested Wayland GNOME Shell for safe testing.
+# Must be run from a terminal INSIDE your graphical GNOME session
+# (needs $WAYLAND_DISPLAY set — use gnome-terminal, not VS Code terminal).
 .PHONY: nested
 nested:
-	dbus-run-session gnome-shell --devkit --wayland
+	MUTTER_DEBUG_DUMMY_MODE_SPECS=1920x1080 \
+	dbus-run-session -- gnome-shell --devkit --wayland
 
 # ── i18n helpers ──────────────────────────────────────────────────────────────
 

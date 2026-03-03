@@ -23,7 +23,9 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 import { ProjectDetector } from './core/projectDetector.js';
 import { ProcessTracker }  from './core/processTracker.js';
+import { PortMonitor }     from './core/portMonitor.js';
 import { buildProjectSection } from './ui/projectSection.js';
+import { buildPortSection }   from './ui/portSection.js';
 
 /** Background poll interval in seconds */
 const POLL_INTERVAL_S = 10;
@@ -40,6 +42,7 @@ export default class DevWatchExtension extends Extension {
         // ── Core modules ───────────────────────────────────────────────
         this._projectDetector = new ProjectDetector();
         this._processTracker  = new ProcessTracker();
+        this._portMonitor     = new PortMonitor();
 
         this._projectDetector.onProjectChanged(_info => {
             // React immediately when the focused project changes
@@ -48,6 +51,7 @@ export default class DevWatchExtension extends Extension {
 
         this._projectDetector.start(this._cancellable);
         this._processTracker.start(this._cancellable);
+        this._portMonitor.start(this._cancellable);
 
         // ── Panel Indicator ────────────────────────────────────────────
         this._indicator = new PanelMenu.Button(0.0, this.metadata.name, false);
@@ -123,6 +127,9 @@ export default class DevWatchExtension extends Extension {
         this._processTracker?.stop();
         this._processTracker = null;
 
+        this._portMonitor?.stop();
+        this._portMonitor = null;
+
         // Cancel all in-flight async operations
         this._cancellable?.cancel();
         this._cancellable = null;
@@ -139,12 +146,13 @@ export default class DevWatchExtension extends Extension {
     // ── Private ────────────────────────────────────────────────────────────
 
     /**
-     * Run a full /proc scan and rebuild the Active Projects section.
+     * Run a full /proc + port scan and rebuild both dropdown sections.
      * Safe to call from timers and signal handlers.
      */
     async _refresh() {
         if (!this._processTracker) return; // already disabled
 
+        // Run process scan first — portMonitor uses its PID cache
         let projectMap;
         try {
             projectMap = await this._processTracker.scan();
@@ -156,11 +164,49 @@ export default class DevWatchExtension extends Extension {
 
         if (!this._indicator) return; // disabled while awaiting
 
-        // Rebuild the projects section
+        // Run port scan (uses processTracker's freshly updated PID index)
+        let portResult = { ports: [], newPorts: [] };
+        try {
+            portResult = await this._portMonitor.scan(this._processTracker);
+        } catch (e) {
+            if (!this._isCancelled(e)) this._logError(e);
+        }
+
+        if (!this._indicator) return;
+
+        // Rebuild both sections
         buildProjectSection(this._indicator.menu, projectMap);
+        buildPortSection(
+            this._indicator.menu,
+            portResult,
+            (pid, port) => this._killProcess(pid, port)
+        );
 
         // Update status dot colour
-        this._updateStatusDot(projectMap);
+        this._updateStatusDot(projectMap, portResult);
+    }
+
+    /**
+     * Send SIGTERM to a process by PID.
+     * @param {number} pid
+     * @param {number} port
+     */
+    _killProcess(pid, port) {
+        try {
+            const proc = new Gio.Subprocess({
+                argv: ['kill', String(pid)],
+                flags: Gio.SubprocessFlags.NONE,
+            });
+            proc.init(null);
+            console.log(`[DevWatch] Sent SIGTERM to PID ${pid} (port ${port})`);
+            // Schedule a refresh in 1.5s so the port row disappears promptly
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1500, () => {
+                this._refresh().catch(e => this._logError(e));
+                return GLib.SOURCE_REMOVE;
+            });
+        } catch (e) {
+            this._logError(e);
+        }
     }
 
     /**
@@ -179,17 +225,8 @@ export default class DevWatchExtension extends Extension {
 
         // The Active Projects section will be inserted here by buildProjectSection()
 
-        // Active Ports placeholder (Pillar 2 — to be implemented)
-        const portsTitle = new PopupMenu.PopupMenuItem('ACTIVE PORTS', { reactive: false });
-        portsTitle.label.style_class = 'devwatch-section-title';
-        portsTitle._devwatchStatic = true;
-        menu.addMenuItem(portsTitle);
-
-        const noPorts = new PopupMenu.PopupMenuItem('  Port monitoring coming in Pillar 2', { reactive: false });
-        noPorts.label.style_class = 'devwatch-dim';
-        menu.addMenuItem(noPorts);
-
-        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        // Active Ports — populated dynamically by buildPortSection() on each refresh
+        // (No static placeholder needed — buildPortSection shows its own empty state)
 
         // Footer
         menu.addAction('Refresh Now', () => {
@@ -198,30 +235,30 @@ export default class DevWatchExtension extends Extension {
     }
 
     /**
-     * Update the panel status dot colour based on current project health.
+     * Update the panel status dot colour based on overall dev health.
      *
      * Green  — all clear
      * Yellow — any project exceeds 80% aggregate CPU
-     * Red    — any zombie process detected
+     * Red    — any zombie process OR newly conflicting port detected
      *
      * @param {Map<string, object>} projectMap
+     * @param {{ ports: object[], newPorts: object[] }} portResult
      */
-    _updateStatusDot(projectMap) {
+    _updateStatusDot(projectMap, portResult = { ports: [], newPorts: [] }) {
         if (!this._statusDot) return;
 
         let dotClass = 'devwatch-dot-green';
 
-        if (projectMap && projectMap.size > 0) {
-            const hasZombie = [...projectMap.values()].some(p =>
-                p.processes.some(proc => proc.state === 'Z')
-            );
-            const highCpu = [...projectMap.values()].some(p =>
-                p.totalCpuPercent > 80
-            );
+        const hasZombie = projectMap && [...projectMap.values()].some(p =>
+            p.processes.some(proc => proc.state === 'Z')
+        );
+        const hasConflict = portResult.newPorts?.length > 0;
+        const highCpu = projectMap && [...projectMap.values()].some(p =>
+            p.totalCpuPercent > 80
+        );
 
-            if (hasZombie)       dotClass = 'devwatch-dot-red';
-            else if (highCpu)    dotClass = 'devwatch-dot-yellow';
-        }
+        if (hasZombie || hasConflict) dotClass = 'devwatch-dot-red';
+        else if (highCpu)             dotClass = 'devwatch-dot-yellow';
 
         this._statusDot.style_class = `devwatch-dot ${dotClass}`;
     }

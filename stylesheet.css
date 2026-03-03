@@ -112,3 +112,38 @@
 .devwatch-state-stopped {
     color: #c0bfbc;
 }
+
+/* ── Port section ──────────────────────────────────────────────────────────── */
+
+.devwatch-port-row {
+    spacing: 6px;
+}
+
+.devwatch-dot-blue {
+    color: #78aeed;
+}
+
+.devwatch-dot-dim {
+    color: #555555;
+}
+
+.devwatch-port-number {
+    font-weight: bold;
+    font-size: 12px;
+    color: #78aeed;
+}
+
+.devwatch-port-dim {
+    color: #777777;
+    font-weight: normal;
+}
+
+.devwatch-port-proto {
+    font-size: 10px;
+    font-weight: bold;
+    color: #aaaaaa;
+}
+
+.devwatch-project-link {
+    color: #57e389;
+}

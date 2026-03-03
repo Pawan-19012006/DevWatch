@@ -49,9 +49,11 @@ DevWatch fills that gap by mapping running system processes back to your develop
 - Per-candidate Kill button; bulk **Clean All** action
 - Status dot turns **red** on zombie/orphan, **yellow** on idle tools
 
-### Pillar 4 — Dev Session Snapshot & Restore
-- Captures running processes, ports, active git branches
-- Restores full dev environment after reboot
+### Pillar 4 — Dev Session Snapshot & Restore ✅
+- **Save Now** captures active projects (git branch), ports, and process names to `~/.local/share/devwatch/snapshots/`
+- **Restore** reopens `gnome-terminal` at each saved project root with the branch in the window title
+- Snapshot list in the panel dropdown — up to 5 shown, max 20 kept on disk
+- Per-snapshot **Delete** button; auto-prunes oldest when limit is reached
 
 ### Pillar 5 — Dev Performance Intelligence
 - Detects active builds (`npm`, `cargo`, `make`, `gradle`, `go build`, …)
@@ -121,7 +123,7 @@ DevWatch/
 │   ├── projectSection.js ← Active Projects section (process rows + Open Terminal)
 │   ├── portSection.js    ← Active Ports section (Kill + Copy PID buttons)
 │   ├── cleanupSection.js ← Cleanup Candidates section (Clean All + Kill per row)
-│   ├── snapshotSection.js← Session Snapshot controls   (Pillar 4 — planned)
+│   ├── snapshotSection.js← Session Snapshot: Save Now, Restore, Delete rows
 │   └── perfSection.js    ← Performance Summary         (Pillar 5 — planned)
 ├── core/
 │   ├── projectDetector.js← Git root + window focus tracking
@@ -129,7 +131,7 @@ DevWatch/
 │   ├── portMonitor.js    ← ss -tulnp parsing + runtime tracking + conflict detection
 │   ├── conflictNotifier.js ← GNOME notifications for newly occupied dev ports
 │   ├── cleanupEngine.js  ← Zombie / orphan / idle-dev detection + candidate scoring
-│   ├── snapshotManager.js← Save/restore session JSON   (Pillar 4 — planned)
+│   ├── snapshotManager.js← Save/list/load/restore/delete session JSON snapshots
 │   └── buildDetector.js  ← Build detection + resource spike recording (Pillar 5 — planned)
 └── utils/
     ├── subprocess.js     ← Async execCommunicate() helper
@@ -217,7 +219,10 @@ Use [GitHub Issues](https://github.com/Adithya-Balan/DevWatch/issues). Include:
 - [x] `ui/cleanupSection.js` — Cleanup Candidates renderer with Clean All + Kill (Step 14)
 - [x] Pillar 3 wired into extension.js + status dot updated (Step 15)
 - [x] **Pillar 3 complete** — Dev environment cleanup engine (Step 16)
-- [ ] Pillar 4: Session snapshot & restore
+- [x] `core/snapshotManager.js` — save/list/load/restore/delete session JSON (Step 17)
+- [x] `ui/snapshotSection.js` — Save Now, Restore & Delete per snapshot row (Step 18)
+- [x] Pillar 4 wired into extension.js (Step 19)
+- [x] **Pillar 4 complete** — Dev session snapshot & restore (Step 20)
 - [ ] Pillar 5: Build performance intelligence
 - [ ] Preferences UI (`prefs.js`)
 - [ ] i18n / translations

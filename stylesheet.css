@@ -1,328 +1,252 @@
-/* ───────────────────────────────────────────────────────────────────────
- * DevWatch — stylesheet.css
- * St widget styling for GNOME Shell
- * ─────────────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════════
+ * DevWatch — stylesheet.css   (v2 — control-center redesign)
+ * ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Panel bar ─────────────────────────────────────────────────────────── */
+/* ── Panel bar ─────────────────────────────────────────────────────────────── */
+.devwatch-panel-box   { spacing: 4px; }
+.devwatch-panel-label { font-size: 12px; }
 
-.devwatch-panel-box {
-    spacing: 4px;
+.devwatch-dot         { font-size: 9px; padding-right: 3px; }
+.devwatch-dot-green   { color: #57e389; }
+.devwatch-dot-yellow  { color: #f8e45c; }
+.devwatch-dot-red     { color: #ed333b; }
+
+/* ── Health summary (top bar) ──────────────────────────────────────────────── */
+.dw-summary-box {
+    padding: 4px 2px 6px 2px;
+    spacing: 0;
+}
+.dw-summary-title {
+    font-size: 14px;
+    font-weight: bold;
+    color: #ffffff;
+    padding-bottom: 3px;
+}
+.dw-summary-stats {
+    font-size: 11px;
+    color: #777777;
+}
+.dw-summary-alert {
+    font-size: 11px;
+    color: #f8e45c;
+    font-weight: bold;
+    padding-top: 2px;
+}
+.dw-refresh-btn {
+    icon-size: 14px;
+    color: #555555;
+    padding: 2px 4px;
+    border-radius: 4px;
+}
+.dw-refresh-btn:hover {
+    color: #cccccc;
+    background-color: rgba(255,255,255,0.08);
 }
 
-.devwatch-panel-label {
-    font-size: 12px;
-}
-
-/* Status dot colours — controlled by swapping CSS class in JS */
-.devwatch-dot {
+/* ── Section headers ───────────────────────────────────────────────────────── */
+.dw-section-label {
     font-size: 10px;
-    padding-right: 2px;
-}
-
-.devwatch-dot-green {
-    color: #57e389;   /* GNOME green */
-}
-
-.devwatch-dot-yellow {
-    color: #f8e45c;   /* GNOME yellow */
-}
-
-.devwatch-dot-red {
-    color: #ed333b;   /* GNOME red */
-}
-
-/* ── Dropdown menu ─────────────────────────────────────────────────────── */
-
-.devwatch-menu-header {
     font-weight: bold;
+    color: #5a5a5a;
+    letter-spacing: 0.8px;
+    x-expand: true;
+    y-align: center;
+}
+.dw-section-action {
+    font-size: 10px;
+    color: #78aeed;
+    padding: 2px 8px;
+    border-radius: 5px;
+}
+.dw-section-action:hover {
+    color: #b0d0f7;
+    background-color: rgba(120,174,237,0.14);
+}
+.dw-section-action-danger {
+    font-size: 10px;
+    color: #f8e45c;
+    padding: 2px 8px;
+    border-radius: 5px;
+}
+.dw-section-action-danger:hover {
+    color: #ed333b;
+    background-color: rgba(237,51,59,0.15);
+}
+
+/* ── Typography ────────────────────────────────────────────────────────────── */
+.dw-project-name {
     font-size: 13px;
-}
-
-.devwatch-section-title {
     font-weight: bold;
-    font-size: 11px;
-    color: #aaaaaa;
-    text-transform: uppercase;
-    letter-spacing: 1px;
+    color: #eeeeee;
+    x-expand: true;
+    y-align: center;
 }
-
-.devwatch-dim {
-    color: #888888;
+.dw-project-stats {
     font-size: 11px;
+    color: #6a6a6a;
+    y-align: center;
+}
+.dw-project-dot {
+    font-size: 10px;
+    padding-right: 4px;
+    y-align: center;
+}
+.dw-project-dot-green  { color: #57e389; }
+.dw-project-dot-yellow { color: #f8e45c; }
+.dw-project-dot-red    { color: #ed333b; }
+
+.dw-service-name {
+    font-size: 12px;
+    color: #c8c8c8;
+    x-expand: true;
+    y-align: center;
+}
+.dw-service-port {
+    font-size: 11px;
+    color: #78aeed;
+    y-align: center;
+    padding-right: 4px;
+}
+.dw-service-uptime {
+    font-size: 10px;
+    color: #555555;
+    y-align: center;
+    width: 38px;
+}
+.dw-dim {
+    font-size: 11px;
+    color: #545454;
     font-style: italic;
 }
-
-.devwatch-project-name {
-    font-weight: bold;
-    font-size: 12px;
+.dw-muted {
+    font-size: 10px;
+    color: #5e5e5e;
 }
-
-.devwatch-port-number {
-    font-weight: bold;
-    font-size: 12px;
-    color: #78aeed;
-}
-
-.devwatch-meta {
+.dw-alert-label {
     font-size: 11px;
-    color: #aaaaaa;
-}
-
-.devwatch-kill-button {
-    color: #ed333b;
-    font-size: 11px;
-    padding: 0 6px;
-}
-
-/* ── Project section ───────────────────────────────────────────────────────── */
-
-.devwatch-project-header {
-    spacing: 8px;
-}
-
-.devwatch-process-row {
-    spacing: 8px;
-}
-
-/* Process state badges */
-.devwatch-state {
-    font-size: 9px;
-    font-weight: bold;
-    padding: 1px 4px;
-    border-radius: 3px;
-}
-
-.devwatch-state-running {
-    color: #57e389;
-}
-
-.devwatch-state-sleeping {
-    color: #aaaaaa;
-}
-
-.devwatch-state-waiting {
     color: #f8e45c;
-}
-
-.devwatch-state-zombie {
-    color: #ed333b;
-    font-weight: bold;
-}
-
-.devwatch-state-stopped {
-    color: #c0bfbc;
+    font-style: italic;
+    y-align: center;
 }
 
 /* ── Port section ──────────────────────────────────────────────────────────── */
-
-.devwatch-port-row {
-    spacing: 6px;
-}
-
-.devwatch-dot-blue {
-    color: #78aeed;
-}
-
-.devwatch-dot-dim {
-    color: #555555;
-}
-
-.devwatch-port-number {
+.dw-port-number {
+    font-size: 13px;
     font-weight: bold;
-    font-size: 12px;
     color: #78aeed;
+    width: 52px;
+    y-align: center;
 }
-
-.devwatch-port-dim {
-    color: #777777;
-    font-weight: normal;
+.dw-port-number-dim {
+    font-size: 13px;
+    color: #484848;
+    width: 52px;
+    y-align: center;
 }
-
-.devwatch-port-proto {
-    font-size: 10px;
-    font-weight: bold;
+.dw-port-dot        { font-size: 9px; y-align: center; padding-right: 3px; }
+.dw-port-dot-active { color: #57e389; }
+.dw-port-dot-dim    { color: #3a3a3a; }
+.dw-port-process {
+    font-size: 11px;
     color: #aaaaaa;
+    x-expand: true;
+    y-align: center;
 }
 
-.devwatch-project-link {
-    color: #57e389;
+/* ── Action buttons ────────────────────────────────────────────────────────── */
+.dw-btn-kill {
+    font-size: 11px;
+    font-weight: bold;
+    color: #ed333b;
+    padding: 2px 10px;
+    border-radius: 5px;
+    background-color: rgba(237,51,59,0.10);
 }
-
-/* ── One-click actions ─────────────────────────────────────────────────────── */
-
-.devwatch-copy-button {
+.dw-btn-kill:hover {
+    background-color: rgba(237,51,59,0.25);
+    color: #ff6b6b;
+}
+.dw-btn-stop {
+    font-size: 11px;
     color: #888888;
-    font-size: 12px;
-    padding: 0 5px;
+    padding: 2px 8px;
+    border-radius: 5px;
 }
-
-.devwatch-copy-button:hover {
-    color: #78aeed;
+.dw-btn-stop:hover {
+    color: #ed333b;
+    background-color: rgba(237,51,59,0.14);
 }
-
-.devwatch-open-terminal-item {
-    color: #78aeed;
+.dw-btn-load {
     font-size: 11px;
+    color: #888888;
+    padding: 2px 8px;
+    border-radius: 5px;
+}
+.dw-btn-load:hover {
+    color: #78aeed;
+    background-color: rgba(120,174,237,0.14);
+}
+.dw-btn-delete {
+    font-size: 11px;
+    color: #484848;
+    padding: 2px 6px;
+    border-radius: 5px;
+}
+.dw-btn-delete:hover {
+    color: #ed333b;
+    background-color: rgba(237,51,59,0.12);
 }
 
-/* ── Cleanup section ──────────────────────────────────────────────────────────── */
-
-.devwatch-cleanup-row {
-    spacing: 6px;
-}
-
-.devwatch-cleanup-ok {
+/* ── Cleanup / Issues ──────────────────────────────────────────────────────── */
+.dw-issue-ok {
+    font-size: 11px;
     color: #57e389;
-    font-size: 11px;
     font-style: italic;
 }
-
-.devwatch-clean-all-button {
-    color: #f8e45c;
-    font-size: 11px;
-    padding: 0 6px;
+.dw-issue-name {
+    font-size: 12px;
+    color: #cccccc;
+    x-expand: true;
+    y-align: center;
 }
-
-.devwatch-clean-all-button:hover {
-    color: #ed333b;
+.dw-issue-reason {
+    font-size: 10px;
+    padding: 1px 7px;
+    border-radius: 20px;
+    y-align: center;
 }
+.dw-issue-reason-idle    { color: #888888; background-color: rgba(255,255,255,0.06); }
+.dw-issue-reason-stray   { color: #f8e45c; background-color: rgba(248,228,92,0.10); }
+.dw-issue-reason-frozen  { color: #ed333b; background-color: rgba(237,51,59,0.10); }
 
-/* Reason icons */
-.devwatch-cleanup-icon {
-    font-size: 13px;
-    padding-right: 2px;
-}
-
-.devwatch-cleanup-icon-zombie {
-    color: #ed333b;
-}
-
-.devwatch-cleanup-icon-orphan {
-    color: #f8e45c;
-}
-
-.devwatch-cleanup-icon-idle-dev {
-    color: #888888;
-}
-
-/* Reason badges */
-.devwatch-cleanup-badge {
-    font-size: 9px;
-    font-weight: bold;
-    padding: 1px 4px;
-    border-radius: 3px;
-}
-
-.devwatch-cleanup-badge-zombie {
-    color: #ed333b;
-}
-
-.devwatch-cleanup-badge-orphan {
-    color: #f8e45c;
-}
-
-.devwatch-cleanup-badge-idle-dev {
-    color: #888888;
-}
-
-/* ── Snapshot section ─────────────────────────────────────────────────────────── */
-
-.devwatch-snapshot-row {
-    spacing: 6px;
-}
-
-.devwatch-snapshot-icon {
-    font-size: 13px;
-    padding-right: 2px;
-}
-
-.devwatch-snapshot-label {
-    font-size: 11px;
+/* ── Snapshots ─────────────────────────────────────────────────────────────── */
+.dw-snap-name {
+    font-size: 12px;
     font-weight: bold;
     color: #dddddd;
+    x-expand: true;
+    y-align: center;
 }
-
-.devwatch-snapshot-save-button {
-    color: #57e389;
-    font-size: 11px;
-    padding: 0 6px;
-}
-
-.devwatch-snapshot-save-button:hover {
-    color: #ffffff;
-}
-
-.devwatch-snapshot-restore-button {
-    color: #78aeed;
-    font-size: 11px;
-    padding: 0 6px;
-}
-
-.devwatch-snapshot-restore-button:hover {
-    color: #ffffff;
-}
-
-.devwatch-snapshot-delete-button {
-    color: #888888;
-    font-size: 11px;
-    padding: 0 5px;
-}
-
-.devwatch-snapshot-delete-button:hover {
-    color: #ed333b;
-}
-
-/* ── Pillar 5 — Build Performance ───────────────────────────────────────── */
-
-.devwatch-perf-row {
-    padding: 2px 0;
-    spacing: 6px;
-}
-
-.devwatch-perf-active-icon {
-    color: #f5c211;         /* amber gear — in-progress */
-    font-size: 14px;
-    width: 18px;
-}
-
-.devwatch-perf-tool {
-    font-size: 12px;
-    font-weight: bold;
-    color: #ffffff;
-}
-
-.devwatch-perf-cpu-active {
-    font-size: 11px;
-    color: #ff7800;         /* orange — live CPU */
-    font-weight: bold;
-}
-
-.devwatch-perf-icon-ok {
-    color: #57e389;         /* green check */
-    font-size: 12px;
-    width: 18px;
-}
-
-.devwatch-perf-icon-short {
-    color: #888888;         /* grey cross — very short / failed */
-    font-size: 12px;
-    width: 18px;
-}
-
-.devwatch-perf-history-header {
+.dw-snap-meta {
     font-size: 10px;
-    color: #888888;
-    font-weight: bold;
-    letter-spacing: 1px;
-    padding-top: 4px;
+    color: #5e5e5e;
+    y-align: center;
+    width: 80px;
 }
 
-.devwatch-refresh-icon {
-    icon-size: 16px;
-    color: #888888;
-    padding: 2px;
-}
+/* ── Build section ─────────────────────────────────────────────────────────── */
+.dw-build-active-icon { color: #f8e45c; font-size: 14px; width: 20px; y-align: center; }
+.dw-build-active-cpu  { font-size: 11px; color: #ff7800; font-weight: bold; width: 52px; y-align: center; }
+.dw-build-ok-icon     { color: #57e389; font-size: 12px; width: 20px; y-align: center; }
+.dw-build-fail-icon   { color: #555555; font-size: 12px; width: 20px; y-align: center; }
+.dw-build-hist-hdr    { font-size: 10px; color: #545454; font-weight: bold; padding-top: 4px; }
 
-.devwatch-refresh-icon:hover {
-    color: #ffffff;
-}
+/* ── Process sub-rows ──────────────────────────────────────────────────────── */
+.dw-proc-name   { font-size: 11px; color: #b0b0b0; x-expand: true; y-align: center; }
+.dw-proc-state  { font-size: 10px; width: 30px; y-align: center; }
+.dw-proc-green  { color: #57e389; }
+.dw-proc-dim    { color: #555555; }
+.dw-proc-warn   { color: #f8e45c; }
+.dw-proc-red    { color: #ed333b; }
+.dw-open-term   { font-size: 11px; color: #78aeed; padding: 1px 6px; }
+.dw-open-term:hover { color: #aaccf4; }

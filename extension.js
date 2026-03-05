@@ -52,6 +52,7 @@ import { buildCleanupSection }  from './ui/cleanupSection.js';
 import { buildSnapshotSection } from './ui/snapshotSection.js';
 import { BuildDetector }         from './core/buildDetector.js';
 import { buildPerfSection }      from './ui/perfSection.js';
+import { buildHealthSummary, clearHealthSummary } from './ui/healthSummary.js';
 
 /** Fallback poll interval — used before settings load (should never be needed). */
 const DEFAULT_POLL_INTERVAL_S = 10;
@@ -283,8 +284,14 @@ export default class DevWatchExtension extends Extension {
         const showSystemPorts  = this._settings?.get_boolean('show-system-ports') ?? false;
         const maxBuildHistory  = this._settings?.get_int('max-build-history') ?? 8;
 
-        // Rebuild all five sections
-        buildProjectSection(this._indicator.menu, projectMap);
+        // Rebuild all sections — health summary first, then content
+        buildHealthSummary(
+            this._indicator.menu,
+            projectMap,
+            portResult,
+            () => this._refresh().catch(e => this._logError(e))
+        );
+        buildProjectSection(this._indicator.menu, projectMap, portResult);
         buildPortSection(
             this._indicator.menu,
             portResult,
@@ -395,31 +402,8 @@ export default class DevWatchExtension extends Extension {
      * The dynamic projects section is injected by buildProjectSection().
      */
     _buildMenuSkeleton() {
-        const menu = this._indicator.menu;
-
-        // Header
-        const header = new PopupMenu.PopupMenuItem(_('DevWatch'), { reactive: false });
-        header.label.style_class = 'devwatch-menu-header';
-        menu.addMenuItem(header);
-
-        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-
-        // The Active Projects section will be inserted here by buildProjectSection()
-
-        // Active Ports — populated dynamically by buildPortSection() on each refresh
-        // (No static placeholder needed — buildPortSection shows its own empty state)
-
-        // Footer — icon-only refresh button
-        const refreshItem = new PopupMenu.PopupBaseMenuItem({ reactive: true });
-        const refreshIcon = new St.Icon({
-            icon_name: 'view-refresh-symbolic',
-            style_class: 'devwatch-refresh-icon',
-        });
-        refreshItem.add_child(refreshIcon);
-        refreshItem.connect('activate', () => {
-            this._refresh().catch(e => this._logError(e));
-        });
-        menu.addMenuItem(refreshItem);
+        // Health summary (title + stats + refresh icon) is built dynamically
+        // by buildHealthSummary() on every _refresh() — nothing static here.
     }
 
     /**

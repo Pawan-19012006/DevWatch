@@ -1,23 +1,21 @@
 /**
- * DevWatch — ui/projectSection.js
+ * DevWatch — ui/projectSection.js  (v2)
  *
- * Renders the "Active Projects" section inside the panel dropdown.
+ * Section: "Running Projects"
  *
- * Layout (per project):
- *   ▸ my-project  [3 proc · CPU 4.2% · RAM 312 MB]
- *     node server.js (4821)        S  CPU 1.2%  RAM 128 MB
- *     postgres       (4900)        S  CPU 0.8%  RAM  96 MB
- *     redis-server   (4981)        S  CPU 0.1%  RAM  12 MB
+ * Level 1 (always visible):
+ *   🟢 my-project          4 processes · 151 MB
  *
- * Uses PopupSubMenuMenuItem for expandable project rows,
- * with a custom BoxLayout header showing the aggregate stats.
+ * Level 2 (expand → sub-menu):
+ *   python server     port 8000     2m
+ *   bash (terminal)
  *
- * Exports
- * ───────
- *   buildProjectSection(menu, projectMap)
- *     Clears any previous project items and rebuilds from fresh data.
- *   clearProjectSection(menu)
- *     Removes all project section items from the menu.
+ *   [Stop Project]  [Open Terminal]
+ *
+ * Design goals:
+ *  - Service-oriented, not process-dump
+ *  - No raw PID / state codes exposed at top level
+ *  - Stop Project is a first-class action
  */
 
 import Gio from 'gi://Gio';
@@ -26,291 +24,246 @@ import Clutter from 'gi://Clutter';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import { _ } from '../utils/i18n.js';
 
-// Tags used to identify items belonging to this section (for targeted removal)
 const SECTION_TAG = 'devwatch-projects';
 
 // ── Public API ─────────────────────────────────────────────────────────────────
 
-/**
- * Rebuild the Active Projects section in the given menu.
- *
- * @param {PopupMenu.PopupMenu} menu
- * @param {Map<string, import('../core/processTracker.js').ProjectData>} projectMap
- */
-export function buildProjectSection(menu, projectMap) {
-    // Remove previous project section items
+export function buildProjectSection(menu, projectMap, portResult) {
     clearProjectSection(menu);
 
-    // ── Section title ──────────────────────────────────────────────────────
-    const title = new PopupMenu.PopupMenuItem(_('ACTIVE PROJECTS'), { reactive: false });
-    title.label.style_class = 'devwatch-section-title';
-    title._devwatchSection = SECTION_TAG;
-    menu.addMenuItem(title);
+    // Build a pid→port lookup so we can label processes by port
+    const pidToPort = new Map();
+    for (const p of (portResult?.ports ?? [])) {
+        if (p.pid) pidToPort.set(p.pid, p.port);
+    }
+
+    // Section title
+    const titleItem = new PopupMenu.PopupMenuItem('', { reactive: false });
+    titleItem._devwatchSection = SECTION_TAG;
+    const titleRow = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
+    titleRow.add_child(new St.Label({ text: _('Running Projects'), style_class: 'dw-section-label' }));
+    titleItem.add_child(titleRow);
+    titleItem.label.hide();
+    menu.addMenuItem(titleItem);
 
     if (!projectMap || projectMap.size === 0) {
-        // Empty state
-        const empty = new PopupMenu.PopupMenuItem(_('  No dev projects detected'), { reactive: false });
-        empty.label.style_class = 'devwatch-dim';
+        const empty = new PopupMenu.PopupMenuItem(
+            _('  Open an editor or terminal to start a project'), { reactive: false }
+        );
+        empty.label.style_class = 'dw-dim';
         empty._devwatchSection = SECTION_TAG;
         menu.addMenuItem(empty);
-
-        const hint = new PopupMenu.PopupMenuItem(
-            _('  Focus a terminal or editor window to detect a project'),
-            { reactive: false }
-        );
-        hint.label.style_class = 'devwatch-dim';
-        hint._devwatchSection = SECTION_TAG;
-        menu.addMenuItem(hint);
-
-        const sep = new PopupMenu.PopupSeparatorMenuItem();
-        sep._devwatchSection = SECTION_TAG;
-        menu.addMenuItem(sep);
+        _addSep(menu, SECTION_TAG);
         return;
     }
 
-    // ── One row per project ────────────────────────────────────────────────
-    const sortedProjects = [...projectMap.values()].sort(
-        (a, b) => b.totalCpuPercent - a.totalCpuPercent // highest CPU first
-    );
-
-    for (const project of sortedProjects) {
-        const item = _buildProjectRow(project);
+    const sorted = [...projectMap.values()].sort((a, b) => b.totalCpuPercent - a.totalCpuPercent);
+    for (const project of sorted) {
+        const item = _buildProjectRow(project, pidToPort);
         item._devwatchSection = SECTION_TAG;
         menu.addMenuItem(item);
     }
-
-    const sep = new PopupMenu.PopupSeparatorMenuItem();
-    sep._devwatchSection = SECTION_TAG;
-    menu.addMenuItem(sep);
+    _addSep(menu, SECTION_TAG);
 }
 
-/**
- * Remove all items tagged as belonging to the projects section.
- * @param {PopupMenu.PopupMenu} menu
- */
 export function clearProjectSection(menu) {
-    const toRemove = menu._getMenuItems().filter(
-        item => item._devwatchSection === SECTION_TAG
-    );
-    for (const item of toRemove) item.destroy();
+    for (const item of menu._getMenuItems().filter(i => i._devwatchSection === SECTION_TAG))
+        item.destroy();
 }
 
-// ── Private builders ──────────────────────────────────────────────────────────
+// ── Row builders ───────────────────────────────────────────────────────────────
 
-/**
- * Build a PopupSubMenuMenuItem for a single project.
- *
- * @param {import('../core/processTracker.js').ProjectData} project
- * @returns {PopupMenu.PopupSubMenuMenuItem}
- */
-function _buildProjectRow(project) {
-    const subMenu = new PopupMenu.PopupSubMenuMenuItem('', true);
+function _buildProjectRow(project, pidToPort) {
+    const sub = new PopupMenu.PopupSubMenuMenuItem('', true);
+    sub.label.text = '';
 
-    // Replace the default label content with a BoxLayout for richer layout
-    subMenu.label.text = '';
+    // ── Level 1 header ─────────────────────────────────────────────────────
+    const header = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER, spacing: 4 });
 
-    const headerBox = new St.BoxLayout({
-        x_expand: true,
-        y_align: Clutter.ActorAlign.CENTER,
-        style_class: 'devwatch-project-header',
+    // Health dot
+    const dot = new St.Label({
+        text: '●',
+        style_class: `dw-project-dot ${_projectDotClass(project)}`,
     });
+    header.add_child(dot);
 
     // Project name
-    const nameLabel = new St.Label({
+    header.add_child(new St.Label({
         text: project.name,
-        style_class: 'devwatch-project-name',
-        x_expand: true,
-        y_align: Clutter.ActorAlign.CENTER,
-    });
+        style_class: 'dw-project-name',
+    }));
 
-    // Stats pill: "3 proc · CPU 4.2% · RAM 312 MB"
-    const statsLabel = new St.Label({
-        text: _formatProjectStats(project),
-        style_class: 'devwatch-meta',
-        y_align: Clutter.ActorAlign.CENTER,
-    });
+    // Summary: "4 processes · 151 MB"
+    const ram = _formatKb(project.totalMemKb);
+    const count = project.processes.length;
+    header.add_child(new St.Label({
+        text: `${count} ${count === 1 ? 'process' : 'processes'} · ${ram}`,
+        style_class: 'dw-project-stats',
+    }));
 
-    headerBox.add_child(nameLabel);
-    headerBox.add_child(statsLabel);
+    sub.label.get_parent().insert_child_above(header, sub.label);
 
-    // Insert the header box into the sub-menu's actor
-    subMenu.label.get_parent().insert_child_above(headerBox, subMenu.label);
-
-    // ── Per-process sub-items ──────────────────────────────────────────────
-    // Sort by CPU descending, show at most 10 processes
-    const topProcesses = [...project.processes]
-        .sort((a, b) => b.cpuPercent - a.cpuPercent)
-        .slice(0, 10);
-
-    for (const proc of topProcesses) {
-        const procItem = _buildProcessRow(proc);
-        subMenu.menu.addMenuItem(procItem);
+    // ── Level 2: service list ──────────────────────────────────────────────
+    const services = _toServices(project, pidToPort);
+    for (const svc of services) {
+        sub.menu.addMenuItem(_buildServiceRow(svc));
+    }
+    if (services.length === 0) {
+        const empty = new PopupMenu.PopupMenuItem('  No visible services', { reactive: false });
+        empty.label.style_class = 'dw-dim';
+        sub.menu.addMenuItem(empty);
     }
 
-    if (project.processes.length > 10) {
-        const moreItem = new PopupMenu.PopupMenuItem(
-            `  … and ${project.processes.length - 10} more processes`,
-            { reactive: false }
-        );
-        moreItem.label.style_class = 'devwatch-dim';
-        subMenu.menu.addMenuItem(moreItem);
-    }
+    sub.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-    // ── Project actions ────────────────────────────────────────────────────
-    subMenu.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+    // ── Actions ────────────────────────────────────────────────────────────
+    const actionsItem = new PopupMenu.PopupMenuItem('', { reactive: false });
+    const actionsRow = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER, spacing: 6 });
 
-    const termItem = new PopupMenu.PopupMenuItem('⎋  Open terminal here');
-    termItem.label.style_class = 'devwatch-open-terminal-item';
-    termItem.connect('activate', () => _openTerminalAt(project.root));
-    subMenu.menu.addMenuItem(termItem);
+    const stopBtn = new St.Button({
+        label: '⏹  Stop Project',
+        style_class: 'dw-btn-stop',
+        reactive: true, can_focus: true, track_hover: true,
+    });
+    stopBtn.connect('clicked', () => _stopProject(project));
+    actionsRow.add_child(stopBtn);
 
-    return subMenu;
+    const termBtn = new St.Button({
+        label: '⌨  Open Terminal',
+        style_class: 'dw-open-term',
+        reactive: true, can_focus: true, track_hover: true,
+    });
+    termBtn.connect('clicked', () => _openTerminalAt(project.root));
+    actionsRow.add_child(termBtn);
+
+    actionsItem.add_child(actionsRow);
+    actionsItem.label.hide();
+    sub.menu.addMenuItem(actionsItem);
+
+    return sub;
 }
 
-/**
- * Build a single process row inside a project's sub-menu.
- *
- * @param {import('../core/processTracker.js').ProcessInfo} proc
- * @returns {PopupMenu.PopupMenuItem}
- */
-function _buildProcessRow(proc) {
+function _buildServiceRow(svc) {
     const item = new PopupMenu.PopupMenuItem('', { reactive: false });
+    const row  = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER, spacing: 8 });
 
-    const box = new St.BoxLayout({
-        x_expand: true,
-        y_align: Clutter.ActorAlign.CENTER,
-        style_class: 'devwatch-process-row',
-    });
+    row.add_child(new St.Label({ text: svc.displayName, style_class: 'dw-service-name' }));
 
-    // Process name + PID
-    const nameLabel = new St.Label({
-        text: `${_truncate(proc.name, 20)} (${proc.pid})`,
-        style_class: 'devwatch-meta',
-        x_expand: true,
-        y_align: Clutter.ActorAlign.CENTER,
-    });
+    if (svc.port) {
+        row.add_child(new St.Label({ text: `port ${svc.port}`, style_class: 'dw-service-port' }));
+    }
+    if (svc.state) {
+        row.add_child(new St.Label({
+            text: svc.stateSymbol,
+            style_class: `dw-proc-state ${svc.stateClass}`,
+        }));
+    }
 
-    // State indicator
-    const stateLabel = new St.Label({
-        text: _stateDisplay(proc.state),
-        style_class: `devwatch-state devwatch-state-${_stateClass(proc.state)}`,
-        y_align: Clutter.ActorAlign.CENTER,
-    });
-
-    // CPU%
-    const cpuLabel = new St.Label({
-        text: `CPU ${proc.cpuPercent.toFixed(1)}%`,
-        style_class: 'devwatch-meta',
-        y_align: Clutter.ActorAlign.CENTER,
-    });
-
-    // RAM
-    const ramLabel = new St.Label({
-        text: `RAM ${_formatKb(proc.memKb)}`,
-        style_class: 'devwatch-meta',
-        y_align: Clutter.ActorAlign.CENTER,
-    });
-
-    box.add_child(nameLabel);
-    box.add_child(stateLabel);
-    box.add_child(cpuLabel);
-    box.add_child(ramLabel);
-
-    // Copy PID button
-    const copyBtn = new St.Button({
-        label: '⧉',
-        style_class: 'devwatch-copy-button',
-        y_align: Clutter.ActorAlign.CENTER,
-        reactive: true,
-        can_focus: true,
-        track_hover: true,
-    });
-    copyBtn.connect('clicked', () => {
-        St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, String(proc.pid));
-    });
-    box.add_child(copyBtn);
-
-    item.add_child(box);
-    item.label.hide(); // hide the default empty label
-
+    item.add_child(row);
+    item.label.hide();
     return item;
 }
 
-// ── Formatting helpers ─────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
 /**
- * Format aggregate project stats into a short summary string.
- * @param {import('../core/processTracker.js').ProjectData} p
- * @returns {string}
+ * Convert raw processes into service-level items.
+ * Prioritises processes that own ports, then filters out noise.
  */
-function _formatProjectStats(p) {
-    const count = p.processes.length;
-    const cpu   = p.totalCpuPercent.toFixed(1);
-    const ram   = _formatKb(p.totalMemKb);
-    return `${count} proc · CPU ${cpu}% · RAM ${ram}`;
+function _toServices(project, pidToPort) {
+    const seen = new Set();
+    const result = [];
+
+    // Processes with a port first → they are "servers"
+    const withPort = project.processes
+        .filter(p => pidToPort.has(p.pid))
+        .sort((a, b) => b.cpuPercent - a.cpuPercent);
+
+    for (const p of withPort) {
+        result.push({
+            displayName: _cleanProcessName(p.name),
+            port: pidToPort.get(p.pid),
+            stateSymbol: _stateSymbol(p.state),
+            stateClass:  _stateClass(p.state),
+            state: p.state,
+        });
+        seen.add(p.pid);
+    }
+
+    // Remaining meaningful processes (skip noise)
+    const rest = project.processes
+        .filter(p => !seen.has(p.pid) && !_isNoise(p.name))
+        .sort((a, b) => b.cpuPercent - a.cpuPercent)
+        .slice(0, Math.max(0, 6 - result.length));
+
+    for (const p of rest) {
+        result.push({
+            displayName: _cleanProcessName(p.name),
+            port: null,
+            stateSymbol: _stateSymbol(p.state),
+            stateClass:  _stateClass(p.state),
+            state: p.state,
+        });
+    }
+
+    return result;
 }
 
-/**
- * Format a kilobyte value as a human-readable string.
- * @param {number} kb
- * @returns {string}
- */
+/** Return a CSS class for the project health dot. */
+function _projectDotClass(project) {
+    const hasZombie = project.processes.some(p => p.state === 'Z');
+    if (hasZombie) return 'dw-project-dot-red';
+    if (project.totalCpuPercent > 80) return 'dw-project-dot-yellow';
+    return 'dw-project-dot-green';
+}
+
+/** Remove path prefixes, pythonX → python, keep it short. */
+function _cleanProcessName(name) {
+    let n = name.replace(/\/.*\//, '');         // strip path
+    n = n.replace(/^python\d+(\.\d+)?$/, 'python');
+    n = n.replace(/^node$/, 'Node.js');
+    n = n.replace(/^ruby\d*$/, 'ruby');
+    return _truncate(n, 24);
+}
+
+function _isNoise(name) {
+    return /^(sh|bash|dash|cat|grep|awk|sed|tail)$/.test(name);
+}
+
+function _stateSymbol(s) {
+    return { R: '●', S: '○', D: '◔', Z: '✕', T: '‖', I: '○' }[s] ?? '○';
+}
+function _stateClass(s) {
+    if (s === 'R') return 'dw-proc-green';
+    if (s === 'Z') return 'dw-proc-red';
+    if (s === 'D') return 'dw-proc-warn';
+    return 'dw-proc-dim';
+}
+
 function _formatKb(kb) {
-    if (kb < 1024)       return `${kb} KB`;
-    if (kb < 1024 * 1024) return `${(kb / 1024).toFixed(0)} MB`;
+    if (!kb || kb < 1024)        return `${kb ?? 0} KB`;
+    if (kb < 1024 * 1024)        return `${(kb / 1024).toFixed(0)} MB`;
     return `${(kb / 1024 / 1024).toFixed(1)} GB`;
 }
-
-/**
- * Truncate a string to maxLen characters, appending '…' if needed.
- * @param {string} s
- * @param {number} maxLen
- * @returns {string}
- */
-function _truncate(s, maxLen) {
-    return s.length <= maxLen ? s : s.slice(0, maxLen - 1) + '…';
+function _truncate(s, n) { return s && s.length > n ? s.slice(0, n - 1) + '…' : (s ?? ''); }
+function _addSep(menu, tag) {
+    const sep = new PopupMenu.PopupSeparatorMenuItem();
+    sep._devwatchSection = tag;
+    menu.addMenuItem(sep);
 }
 
-/**
- * Map a /proc state character to a human-readable label.
- * @param {string} state
- * @returns {string}
- */
-function _stateDisplay(state) {
-    const map = { R: 'RUN', S: 'SLP', D: 'WAIT', Z: 'ZOMB', T: 'STOP', I: 'IDLE' };
-    return map[state] ?? state;
-}
-
-/**
- * Map a /proc state character to a CSS class suffix.
- * @param {string} state
- * @returns {string}
- */
-function _stateClass(state) {
-    const map = { R: 'running', S: 'sleeping', D: 'waiting', Z: 'zombie', T: 'stopped' };
-    return map[state] ?? 'unknown';
-}
-
-/**
- * Launch a terminal emulator at the given directory path.
- * Tries gnome-terminal first (Ubuntu default), then xterm as a fallback.
- *
- * @param {string} root  Absolute path to open the terminal in.
- */
-function _openTerminalAt(root) {
-    const launcher = new Gio.SubprocessLauncher({
-        flags: Gio.SubprocessFlags.NONE,
-    });
-    launcher.set_cwd(root);
-
-    for (const argv of [
-        ['gnome-terminal'],
-        ['xterm'],
-    ]) {
+function _stopProject(project) {
+    for (const proc of project.processes) {
         try {
-            launcher.spawnv(argv);
-            return;
-        } catch (_) { /* try next candidate */ }
+            const sub = new Gio.Subprocess({ argv: ['kill', String(proc.pid)], flags: Gio.SubprocessFlags.NONE });
+            sub.init(null);
+        } catch (_) {}
     }
-    console.warn('[DevWatch] _openTerminalAt: no suitable terminal found for', root);
+}
+function _openTerminalAt(root) {
+    const launcher = new Gio.SubprocessLauncher({ flags: Gio.SubprocessFlags.NONE });
+    if (root) launcher.set_cwd(root);
+    for (const argv of [['gnome-terminal'], ['xterm']]) {
+        try { launcher.spawnv(argv); return; } catch (_) {}
+    }
 }

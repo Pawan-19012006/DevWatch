@@ -1,29 +1,14 @@
 /**
- * DevWatch — ui/cleanupSection.js
+ * DevWatch — ui/cleanupSection.js  (v2)
  *
- * Renders the "Cleanup Candidates" section inside the panel dropdown.
+ * Section: "Suggested Cleanup"
  *
- * Layout (candidates present):
- *   CLEANUP CANDIDATES              [Clean All]   ← section title + bulk action
- *   ──────────────────────────────────────────────
- *   ☠ node      (4821)  ZOMBIE  128 MB  backend-api  [Kill]
- *   ⚱ nodemon   (5100)  ORPHAN   28 MB  —            [Kill]
- *   ⏸ vite      (6200)  IDLE     8 MB   frontend     [Kill]
+ * Shows actionable cleanup suggestions in plain English:
+ *   Old node server — idle for 2h 14m   [Clean]
+ *   Stray python process — no project   [Clean]
+ *   Frozen process (system will reap)
  *
- * Layout (nothing to clean):
- *   CLEANUP CANDIDATES
- *   ──────────────────────────────────────────────
- *     ✓ No cleanup candidates
- *
- * Reason icons:
- *   ☠  zombie   — already dead, un-reaped
- *   ⚱  orphan   — dev tool with no parent / project
- *   ⏸  idle_dev — long-running tool doing nothing
- *
- * Exports
- * ───────
- *   buildCleanupSection(menu, cleanupResult, onKill)
- *   clearCleanupSection(menu)
+ * "Stop All" is the headline action when there are multiple issues.
  */
 
 import GLib from 'gi://GLib';
@@ -34,205 +19,115 @@ import { _ } from '../utils/i18n.js';
 
 const SECTION_TAG = 'devwatch-cleanup';
 
-// Reason metadata — icon, CSS class suffix, badge label
-const REASON_META = {
-    zombie:   { icon: '☠', badge: 'ZOMBIE', cssClass: 'zombie'   },
-    orphan:   { icon: '⚱', badge: 'ORPHAN', cssClass: 'orphan'   },
-    idle_dev: { icon: '⏸', badge: 'IDLE',   cssClass: 'idle-dev' },
-};
-
-// ── Public API ─────────────────────────────────────────────────────────────────
-
-/**
- * Rebuild the Cleanup Candidates section.
- *
- * @param {PopupMenu.PopupMenu} menu
- * @param {import('../core/cleanupEngine.js').CleanupResult} cleanupResult
- * @param {(pid: number) => void} onKill
- *   Callback invoked when the user clicks Kill on a candidate row.
- */
 export function buildCleanupSection(menu, cleanupResult, onKill) {
     clearCleanupSection(menu);
 
     const candidates = cleanupResult?.candidates ?? [];
+    const killable   = candidates.filter(c => c.reason !== 'zombie');
 
-    // ── Section title row ──────────────────────────────────────────────────
+    // Section header
     const titleItem = new PopupMenu.PopupMenuItem('', { reactive: false });
     titleItem._devwatchSection = SECTION_TAG;
+    const titleRow = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
+    titleRow.add_child(new St.Label({ text: _('Suggested Cleanup'), style_class: 'dw-section-label' }));
 
-    const titleRow = new St.BoxLayout({
-        x_expand: true,
-        y_align: Clutter.ActorAlign.CENTER,
-    });
-
-    const titleLabel = new St.Label({
-        text: _('CLEANUP CANDIDATES'),
-        style_class: 'devwatch-section-title',
-        x_expand: true,
-        y_align: Clutter.ActorAlign.CENTER,
-    });
-    titleRow.add_child(titleLabel);
-
-    // "Clean All" button — only when there are killable candidates
-    const killable = candidates.filter(c => c.reason !== 'zombie'); // zombies can't be kill'd by us
-    if (killable.length > 0) {
-        const cleanAllBtn = new St.Button({
-            label: _('Clean All (%d)').format(killable.length),
-            style_class: 'devwatch-clean-all-button',
+    if (killable.length > 1) {
+        const btn = new St.Button({
+            label: _('Stop All (%d)').format(killable.length),
+            style_class: 'dw-section-action-danger',
+            reactive: true, can_focus: true, track_hover: true,
             y_align: Clutter.ActorAlign.CENTER,
-            reactive: true,
-            can_focus: true,
-            track_hover: true,
         });
-        cleanAllBtn.connect('clicked', () => {
-            for (const c of killable) onKill(c.pid);
-        });
-        titleRow.add_child(cleanAllBtn);
+        btn.connect('clicked', () => { for (const c of killable) onKill(c.pid); });
+        titleRow.add_child(btn);
     }
-
     titleItem.add_child(titleRow);
     titleItem.label.hide();
     menu.addMenuItem(titleItem);
 
-    // ── Empty state ────────────────────────────────────────────────────────
     if (candidates.length === 0) {
-        const ok = new PopupMenu.PopupMenuItem(_('  ✓ No cleanup candidates'), { reactive: false });
-        ok.label.style_class = 'devwatch-cleanup-ok';
+        const ok = new PopupMenu.PopupMenuItem(_('  ✓ No issues detected'), { reactive: false });
+        ok.label.style_class = 'dw-issue-ok';
         ok._devwatchSection = SECTION_TAG;
         menu.addMenuItem(ok);
-
-        const sep = new PopupMenu.PopupSeparatorMenuItem();
-        sep._devwatchSection = SECTION_TAG;
-        menu.addMenuItem(sep);
+        _addSep(menu);
         return;
     }
 
-    // ── One row per candidate ──────────────────────────────────────────────
-    for (const candidate of candidates) {
-        const item = _buildCandidateRow(candidate, onKill);
+    for (const c of candidates) {
+        const item = _buildRow(c, onKill, cleanupResult?.now);
         item._devwatchSection = SECTION_TAG;
         menu.addMenuItem(item);
     }
-
-    const sep = new PopupMenu.PopupSeparatorMenuItem();
-    sep._devwatchSection = SECTION_TAG;
-    menu.addMenuItem(sep);
+    _addSep(menu);
 }
 
-/**
- * Remove all items tagged as belonging to the cleanup section.
- * @param {PopupMenu.PopupMenu} menu
- */
 export function clearCleanupSection(menu) {
-    const toRemove = menu._getMenuItems().filter(
-        item => item._devwatchSection === SECTION_TAG
-    );
-    for (const item of toRemove) item.destroy();
+    for (const item of menu._getMenuItems().filter(i => i._devwatchSection === SECTION_TAG))
+        item.destroy();
 }
 
-// ── Row builder ────────────────────────────────────────────────────────────────
-
-/**
- * @param {import('../core/cleanupEngine.js').CleanupCandidate} candidate
- * @param {(pid: number) => void} onKill
- * @returns {PopupMenu.PopupMenuItem}
- */
-function _buildCandidateRow(candidate, onKill) {
+function _buildRow(c, onKill, now) {
     const item = new PopupMenu.PopupMenuItem('', { reactive: false });
+    const row  = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER, spacing: 8 });
 
-    const row = new St.BoxLayout({
-        x_expand: true,
-        y_align: Clutter.ActorAlign.CENTER,
-        style_class: 'devwatch-cleanup-row',
-    });
+    // Human-readable description
+    const desc = _describe(c, now);
+    row.add_child(new St.Label({ text: desc, style_class: 'dw-issue-name' }));
 
-    const meta = REASON_META[candidate.reason] ?? REASON_META.orphan;
+    // Reason chip
+    const { chipLabel, chipClass } = _reasonMeta(c.reason, c.idleMs, now);
+    row.add_child(new St.Label({ text: chipLabel, style_class: `dw-issue-reason ${chipClass}` }));
 
-    // ── Reason icon ────────────────────────────────────────────────────────
-    const icon = new St.Label({
-        text: meta.icon,
-        style_class: `devwatch-cleanup-icon devwatch-cleanup-icon-${meta.cssClass}`,
-        y_align: Clutter.ActorAlign.CENTER,
-    });
-
-    // ── Process name + PID ─────────────────────────────────────────────────
-    const nameLabel = new St.Label({
-        text: `${_truncate(candidate.name, 16)} (${candidate.pid})`,
-        style_class: 'devwatch-meta',
-        x_expand: true,
-        y_align: Clutter.ActorAlign.CENTER,
-    });
-
-    // ── Reason badge ───────────────────────────────────────────────────────
-    const badgeLabel = new St.Label({
-        text: meta.badge,
-        style_class: `devwatch-cleanup-badge devwatch-cleanup-badge-${meta.cssClass}`,
-        width: 52,
-        y_align: Clutter.ActorAlign.CENTER,
-    });
-
-    // ── Memory ────────────────────────────────────────────────────────────
-    const memLabel = new St.Label({
-        text: _formatKb(candidate.memKb),
-        style_class: 'devwatch-dim',
-        width: 52,
-        y_align: Clutter.ActorAlign.CENTER,
-    });
-
-    // ── Project name or dash ───────────────────────────────────────────────
-    const projText = candidate.projectRoot
-        ? _truncate(GLib.path_get_basename(candidate.projectRoot), 16)
-        : '—';
-    const projLabel = new St.Label({
-        text: projText,
-        style_class: candidate.projectRoot ? 'devwatch-meta devwatch-project-link' : 'devwatch-dim',
-        width: 110,
-        y_align: Clutter.ActorAlign.CENTER,
-    });
-
-    row.add_child(icon);
-    row.add_child(nameLabel);
-    row.add_child(badgeLabel);
-    row.add_child(memLabel);
-    row.add_child(projLabel);
-
-    // ── Kill button ────────────────────────────────────────────────────────
-    // Zombie processes cannot be killed by us (their parent must reap them),
-    // but we show a greyed-out label so the user understands the situation.
-    if (candidate.reason === 'zombie') {
-        const waitingLabel = new St.Label({
-            text: 'awaiting reap',
-            style_class: 'devwatch-dim',
-            y_align: Clutter.ActorAlign.CENTER,
-        });
-        row.add_child(waitingLabel);
+    // Action
+    if (c.reason === 'zombie') {
+        row.add_child(new St.Label({ text: 'system will reap', style_class: 'dw-dim', y_align: Clutter.ActorAlign.CENTER }));
     } else {
-        const killBtn = new St.Button({
-            label: 'Kill',
-            style_class: 'devwatch-kill-button',
-            y_align: Clutter.ActorAlign.CENTER,
-            reactive: true,
-            can_focus: true,
-            track_hover: true,
+        const btn = new St.Button({
+            label: 'Clean',
+            style_class: 'dw-btn-stop',
+            reactive: true, can_focus: true, track_hover: true,
         });
-        killBtn.connect('clicked', () => onKill(candidate.pid));
-        row.add_child(killBtn);
+        btn.connect('clicked', () => onKill(c.pid));
+        row.add_child(btn);
     }
 
     item.add_child(row);
     item.label.hide();
-
     return item;
 }
 
-// ── Formatting helpers ─────────────────────────────────────────────────────────
-
-function _formatKb(kb) {
-    if (kb < 1024)         return `${kb} KB`;
-    if (kb < 1024 * 1024)  return `${(kb / 1024).toFixed(0)} MB`;
-    return `${(kb / 1024 / 1024).toFixed(1)} GB`;
+function _describe(c, now) {
+    const name = _cleanName(c.name);
+    if (c.reason === 'zombie')   return `${name} — frozen process`;
+    if (c.reason === 'orphan')   return `${name} — no project`;
+    if (c.reason === 'idle_dev') {
+        const idle = c.idleMs != null ? ` — idle ${_formatDuration(c.idleMs)}` : ' — idle';
+        return `${name}${idle}`;
+    }
+    return name;
 }
 
-function _truncate(s, maxLen) {
-    return s.length <= maxLen ? s : s.slice(0, maxLen - 1) + '…';
+function _reasonMeta(reason, idleMs) {
+    if (reason === 'zombie')   return { chipLabel: 'Frozen',    chipClass: 'dw-issue-reason-frozen' };
+    if (reason === 'orphan')   return { chipLabel: 'Stray',     chipClass: 'dw-issue-reason-stray'  };
+    if (reason === 'idle_dev') return { chipLabel: 'Idle',      chipClass: 'dw-issue-reason-idle'   };
+    return { chipLabel: reason, chipClass: 'dw-issue-reason-idle' };
+}
+
+function _cleanName(name) {
+    return name.replace(/^python\d+(\.\d+)?$/, 'python');
+}
+function _formatDuration(ms) {
+    if (!ms) return '';
+    if (ms < 60_000)      return `${Math.floor(ms / 1000)}s`;
+    if (ms < 3_600_000)   return `${Math.floor(ms / 60_000)}m`;
+    const h = Math.floor(ms / 3_600_000);
+    const m = Math.floor((ms % 3_600_000) / 60_000);
+    return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+function _addSep(menu) {
+    const sep = new PopupMenu.PopupSeparatorMenuItem();
+    sep._devwatchSection = SECTION_TAG;
+    menu.addMenuItem(sep);
 }

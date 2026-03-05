@@ -1,0 +1,116 @@
+/**
+ * DevWatch — ui/healthSummary.js
+ *
+ * Renders the top "Dev Environment" summary bar inside the panel dropdown.
+ *
+ *   DevWatch                               [↻]
+ *   4 projects running · 3 ports open · 4.1 GB RAM
+ *   ⚠ Campus-Inventory-Management RAM high (3.3 GB)
+ */
+
+import St from 'gi://St';
+import Clutter from 'gi://Clutter';
+import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
+
+const SECTION_TAG = 'devwatch-summary';
+
+/**
+ * @param {PopupMenu.PopupMenu} menu
+ * @param {Map<string, object>}  projectMap
+ * @param {{ ports: object[] }}  portResult
+ * @param {() => void}           onRefresh
+ */
+export function buildHealthSummary(menu, projectMap, portResult, onRefresh) {
+    clearHealthSummary(menu);
+
+    const item = new PopupMenu.PopupBaseMenuItem({ reactive: false });
+    item._devwatchSection = SECTION_TAG;
+
+    const outerBox = new St.BoxLayout({
+        vertical: false,
+        x_expand: true,
+        y_align: Clutter.ActorAlign.START,
+    });
+
+    // ── Left column: title + stats ─────────────────────────────────────────
+    const infoBox = new St.BoxLayout({
+        vertical: true,
+        x_expand: true,
+        y_align: Clutter.ActorAlign.CENTER,
+        spacing: 2,
+    });
+    infoBox.add_child(new St.Label({ text: 'DevWatch', style_class: 'dw-summary-title' }));
+
+    // stats line: "4 projects running · 3 ports open · 4.1 GB RAM"
+    const statsLine = _buildStatsLine(projectMap, portResult);
+    infoBox.add_child(new St.Label({ text: statsLine, style_class: 'dw-summary-stats' }));
+
+    // alert line: high-RAM / high-CPU projects
+    const alertLine = _buildAlertLine(projectMap);
+    if (alertLine) {
+        infoBox.add_child(new St.Label({ text: alertLine, style_class: 'dw-summary-alert' }));
+    }
+
+    outerBox.add_child(infoBox);
+
+    // ── Refresh icon button ────────────────────────────────────────────────
+    const refreshBtn = new St.Button({
+        reactive: true, can_focus: true, track_hover: true,
+        y_align: Clutter.ActorAlign.START,
+    });
+    const refreshIcon = new St.Icon({ icon_name: 'view-refresh-symbolic', style_class: 'dw-refresh-btn' });
+    refreshBtn.set_child(refreshIcon);
+    refreshBtn.connect('clicked', () => onRefresh?.());
+    outerBox.add_child(refreshBtn);
+
+    item.add_child(outerBox);
+    menu.addMenuItem(item);
+
+    // separator after header
+    const sep = new PopupMenu.PopupSeparatorMenuItem();
+    sep._devwatchSection = SECTION_TAG;
+    menu.addMenuItem(sep);
+}
+
+export function clearHealthSummary(menu) {
+    for (const item of menu._getMenuItems().filter(i => i._devwatchSection === SECTION_TAG))
+        item.destroy();
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+function _buildStatsLine(projectMap, portResult) {
+    const projectCount = projectMap?.size ?? 0;
+    const portCount    = (portResult?.ports ?? []).filter(p => p.isDevPort).length;
+    const totalRamKb   = projectMap
+        ? [...projectMap.values()].reduce((s, p) => s + (p.totalMemKb ?? 0), 0)
+        : 0;
+
+    const parts = [];
+    if (projectCount === 0) {
+        parts.push('No projects detected');
+    } else {
+        parts.push(`${projectCount} project${projectCount !== 1 ? 's' : ''} running`);
+    }
+    if (portCount > 0) parts.push(`${portCount} port${portCount !== 1 ? 's' : ''} open`);
+    if (totalRamKb > 0) parts.push(`${_formatKb(totalRamKb)} RAM`);
+
+    return parts.join('  ·  ');
+}
+
+function _buildAlertLine(projectMap) {
+    if (!projectMap) return null;
+    const alerts = [];
+    for (const p of projectMap.values()) {
+        const ramGb = p.totalMemKb / 1024 / 1024;
+        if (p.totalCpuPercent > 80)  alerts.push(`⚠ ${p.name} CPU high (${p.totalCpuPercent.toFixed(0)}%)`);
+        else if (ramGb > 2)          alerts.push(`⚠ ${p.name} RAM high (${ramGb.toFixed(1)} GB)`);
+    }
+    return alerts.length ? alerts.slice(0, 2).join('   ') : null;
+}
+
+function _formatKb(kb) {
+    if (kb < 1024)        return `${kb} KB`;
+    if (kb < 1024 * 1024) return `${(kb / 1024).toFixed(0)} MB`;
+    return `${(kb / 1024 / 1024).toFixed(1)} GB`;
+}

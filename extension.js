@@ -32,6 +32,8 @@
 
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
+import Meta from 'gi://Meta';
+import Shell from 'gi://Shell';
 import St from 'gi://St';
 import Clutter from 'gi://Clutter';
 
@@ -149,6 +151,22 @@ export default class DevWatchExtension extends Extension {
         // ── Add to panel ───────────────────────────────────────────────
         Main.panel.addToStatusArea(this.uuid, this._indicator, 0, 'right');
 
+        // ── Keyboard shortcut (Super+D) ────────────────────────────────
+        try {
+            Main.wm.addKeybinding(
+                'open-devwatch',
+                this._settings,
+                Meta.KeyBindingFlags.NONE,
+                Shell.ActionMode.NORMAL,
+                () => {
+                    if (this._indicator?.menu)
+                        this._indicator.menu.toggle();
+                }
+            );
+        } catch (e) {
+            console.warn('[DevWatch] Could not register Super+D keybinding:', e.message);
+        }
+
         // Initial data load
         this._refresh().catch(e => this._logError(e));
 
@@ -204,6 +222,9 @@ export default class DevWatchExtension extends Extension {
         // Cancel all in-flight async operations
         this._cancellable?.cancel();
         this._cancellable = null;
+
+        // Remove keyboard shortcut
+        try { Main.wm.removeKeybinding('open-devwatch'); } catch (_) {}
 
         // Destroy the indicator (removes it from the panel + tears down the menu)
         this._indicator?.destroy();
@@ -289,7 +310,10 @@ export default class DevWatchExtension extends Extension {
             this._indicator.menu,
             projectMap,
             portResult,
-            () => this._refresh().catch(e => this._logError(e))
+            cleanupResult,
+            () => this._refresh().catch(e => this._logError(e)),
+            () => this._stopAllProjects(),
+            () => this._cleanEnvironment(cleanupResult)
         );
         buildProjectSection(this._indicator.menu, projectMap, portResult);
         buildPortSection(
@@ -394,6 +418,31 @@ export default class DevWatchExtension extends Extension {
             });
         } catch (e) {
             this._logError(e);
+        }
+    }
+
+    /**
+     * Stop all processes belonging to every detected project.
+     * Triggered by the "Stop All" quick-action button.
+     */
+    _stopAllProjects() {
+        if (!this._lastProjectMap) return;
+        for (const project of this._lastProjectMap.values()) {
+            for (const proc of project.processes) {
+                this._killProcess(proc.pid, null);
+            }
+        }
+    }
+
+    /**
+     * Kill all cleanup candidates (orphans + idle-dev; never zombies).
+     * Triggered by the "Clean Dev Environment" quick-action button.
+     * @param {{ candidates: object[] }} cleanupResult
+     */
+    _cleanEnvironment(cleanupResult) {
+        const killable = (cleanupResult?.candidates ?? []).filter(c => c.reason !== 'zombie');
+        for (const c of killable) {
+            this._killProcess(c.pid, null);
         }
     }
 

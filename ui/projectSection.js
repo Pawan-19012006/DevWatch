@@ -153,7 +153,7 @@ function _buildServiceRow(svc) {
     row.add_child(new St.Label({ text: svc.displayName, style_class: 'dw-service-name' }));
 
     if (svc.port) {
-        row.add_child(new St.Label({ text: `port ${svc.port}`, style_class: 'dw-service-port' }));
+        row.add_child(new St.Label({ text: `Port ${svc.port}`, style_class: 'dw-service-port' }));
     }
     if (svc.state) {
         row.add_child(new St.Label({
@@ -184,7 +184,7 @@ function _toServices(project, pidToPort) {
 
     for (const p of withPort) {
         result.push({
-            displayName: _cleanProcessName(p.name),
+            displayName: _toServiceLabel(p.name),
             port: pidToPort.get(p.pid),
             stateSymbol: _stateSymbol(p.state),
             stateClass:  _stateClass(p.state),
@@ -201,7 +201,7 @@ function _toServices(project, pidToPort) {
 
     for (const p of rest) {
         result.push({
-            displayName: _cleanProcessName(p.name),
+            displayName: _toServiceLabel(p.name),
             port: null,
             stateSymbol: _stateSymbol(p.state),
             stateClass:  _stateClass(p.state),
@@ -220,12 +220,34 @@ function _projectDotClass(project) {
     return 'dw-project-dot-green';
 }
 
-/** Remove path prefixes, pythonX → python, keep it short. */
-function _cleanProcessName(name) {
-    let n = name.replace(/\/.*\//, '');         // strip path
-    n = n.replace(/^python\d+(\.\d+)?$/, 'python');
-    n = n.replace(/^node$/, 'Node.js');
-    n = n.replace(/^ruby\d*$/, 'ruby');
+/**
+ * Convert raw process name into a human-readable service label.
+ * Never shows raw interpreter names — always returns developer-facing terms.
+ */
+function _toServiceLabel(name) {
+    if (!name) return 'Unknown';
+    const n = name.replace(/.*\//, '');  // strip path prefix
+    if (/^python\d*(\.\d+)?$/.test(n))   return 'Python Server';
+    if (/^node$/.test(n))                return 'Node.js Server';
+    if (/^ruby\d*$/.test(n))             return 'Ruby Server';
+    if (/^java$/.test(n))                return 'Java Service';
+    if (/^go$/.test(n))                  return 'Go Server';
+    if (/^php(-fpm\d*)?$/.test(n))       return 'PHP Server';
+    if (/^uvicorn$/.test(n))             return 'Uvicorn Server';
+    if (/^gunicorn$/.test(n))            return 'Gunicorn Server';
+    if (/^cargo$/.test(n))               return 'Rust Build';
+    if (/^gradle(w)?$/.test(n))          return 'Gradle Build';
+    if (/^mvn$/.test(n))                 return 'Maven Build';
+    if (/^make$/.test(n))                return 'Make Build';
+    if (/^rustc$/.test(n))               return 'Rust Compiler';
+    if (/^deno$/.test(n))                return 'Deno Server';
+    if (/^bun$/.test(n))                 return 'Bun Server';
+    if (/^nginx$/.test(n))               return 'Nginx';
+    if (/^postgres(ql)?$/.test(n))       return 'PostgreSQL';
+    if (/^redis-server$/.test(n))        return 'Redis';
+    if (/^mongod$/.test(n))              return 'MongoDB';
+    if (/^mysqld?$/.test(n))             return 'MySQL';
+    if (/^(bash|sh|zsh|fish)$/.test(n))  return 'Terminal';
     return _truncate(n, 24);
 }
 

@@ -45,7 +45,7 @@ export function buildPerfSection(menu, buildResult, maxRows = DEFAULT_MAX_HISTOR
     const shown = histRuns.slice(0, maxRows);
 
     if (shown.length > 0) {
-        const histHeader = new PopupMenu.PopupMenuItem(_('Build History'), { reactive: false });
+        const histHeader = new PopupMenu.PopupMenuItem(_('Recent Builds'), { reactive: false });
         histHeader.label.style_class = 'dw-build-hist-hdr';
         histHeader._devwatchSection = SECTION_TAG;
         menu.addMenuItem(histHeader);
@@ -80,15 +80,16 @@ export function clearPerfSection(menu) {
 
 function _buildActiveRow(run) {
     const item = new PopupMenu.PopupMenuItem('', { reactive: false });
-    const row  = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER})
+    const row  = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER});
     row.spacing = 8;
 
     row.add_child(new St.Label({ text: '⚙', style_class: 'dw-build-active-icon' }));
+    row.add_child(new St.Label({ text: 'Build Running', style_class: 'dw-build-status' }));
 
-    const proj = run.projectRoot ? GLib.path_get_basename(run.projectRoot) : null;
+    const proj = run.projectRoot ? GLib.path_get_basename(run.projectRoot) : run.tool;
     row.add_child(new St.Label({
-        text: proj ? `Building ${_truncate(proj, 20)}` : `Building (${run.tool})`,
-        style_class: 'dw-project-name',
+        text: `Project: ${_truncate(proj, 20)}`,
+        style_class: 'dw-muted',
         x_expand: true,
         y_align: Clutter.ActorAlign.CENTER,
     }));

@@ -1,13 +1,13 @@
 /**
- * DevWatch — ui/portSection.js  (v2)
+ * DevWatch — ui/portSection.js  (v3)
  *
  * Section: "Open Ports"
  *
- * Each row shows:
- *   ● 8000   python · backend-api   2m   [Kill Process]
+ * Each row shows project-first:
+ *   ● tracktite  ·  Port 8000  ·  Python  ·  31s   [Stop]
  *
- * "Kill Process" is visually prominent (not a tiny icon).
- * Project is shown where known; if not linked, process name is shown.
+ * If no project is linked, shows process type + port.
+ * Stop button is neutral (not aggressive red).
  */
 
 import GLib from 'gi://GLib';
@@ -72,7 +72,7 @@ export function clearPortSection(menu) {
 
 function _buildRow(record, onKill) {
     const item = new PopupMenu.PopupMenuItem('', { reactive: false });
-    const row  = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER})
+    const row  = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
     row.spacing = 8;
 
     // Active dot
@@ -81,16 +81,24 @@ function _buildRow(record, onKill) {
         style_class: record.isDevPort ? 'dw-port-dot dw-port-dot-active' : 'dw-port-dot dw-port-dot-dim',
     }));
 
-    // Port number
-    row.add_child(new St.Label({
-        text: String(record.port),
-        style_class: record.isDevPort ? 'dw-port-number' : 'dw-port-number-dim',
-    }));
+    // Project name (bold, project-first) — derived from projectRoot or process name
+    const projectLabel = record.projectRoot
+        ? _truncate(GLib.path_get_basename(record.projectRoot), 20)
+        : null;
+    if (projectLabel) {
+        row.add_child(new St.Label({
+            text: projectLabel,
+            style_class: record.isDevPort ? 'dw-port-project' : 'dw-port-number-dim',
+        }));
+    }
 
-    // Human description: "python · backend-api" or "python3" or "PID 1234"
+    // "Port 8000 · Python" — description
+    const detail = _buildDetail(record, !!projectLabel);
     row.add_child(new St.Label({
-        text: _describePort(record),
+        text: detail,
         style_class: 'dw-port-process',
+        x_expand: true,
+        y_align: Clutter.ActorAlign.CENTER,
     }));
 
     // Uptime
@@ -99,15 +107,15 @@ function _buildRow(record, onKill) {
         row.add_child(new St.Label({ text: runtime, style_class: 'dw-service-uptime' }));
     }
 
-    // Prominent Kill button — only when we have a PID
+    // Neutral Stop button — red only when something is actually broken
     if (record.pid && typeof onKill === 'function') {
-        const killBtn = new St.Button({
-            label: 'Kill Process',
-            style_class: 'dw-btn-kill',
+        const stopBtn = new St.Button({
+            label: 'Stop',
+            style_class: 'dw-btn-stop',
             reactive: true, can_focus: true, track_hover: true,
         });
-        killBtn.connect('clicked', () => onKill(record.pid, record.port));
-        row.add_child(killBtn);
+        stopBtn.connect('clicked', () => onKill(record.pid, record.port));
+        row.add_child(stopBtn);
     }
 
     item.add_child(row);
@@ -115,16 +123,36 @@ function _buildRow(record, onKill) {
     return item;
 }
 
-function _describePort(record) {
-    const parts = [];
-    if (record.processName) parts.push(_cleanName(record.processName));
-    if (record.projectRoot) parts.push(_truncate(GLib.path_get_basename(record.projectRoot), 20));
-    if (parts.length) return parts.join(' · ');
-    return record.pid ? `PID ${record.pid}` : '—';
+/**
+ * Build the "Port 8000 · Python" detail string.
+ * When a project name is already shown, include the process label too.
+ */
+function _buildDetail(record, hasProject) {
+    const portPart = `Port ${record.port}`;
+    const procPart = record.processName ? _toServiceLabel(record.processName) : null;
+    if (procPart) return `${portPart}  ·  ${procPart}`;
+    return portPart;
 }
 
-function _cleanName(name) {
-    return name.replace(/^python\d+(\.\d+)?$/, 'python');
+/** Map raw process name to a short human-readable label (no "Server" suffix here). */
+function _toServiceLabel(name) {
+    if (!name) return '';
+    const n = name.replace(/.*\//, '');
+    if (/^python\d*(\.\d+)?$/.test(n))  return 'Python';
+    if (/^node$/.test(n))               return 'Node.js';
+    if (/^ruby\d*$/.test(n))            return 'Ruby';
+    if (/^java$/.test(n))               return 'Java';
+    if (/^go$/.test(n))                 return 'Go';
+    if (/^php/.test(n))                 return 'PHP';
+    if (/^uvicorn$/.test(n))            return 'Uvicorn';
+    if (/^gunicorn$/.test(n))           return 'Gunicorn';
+    if (/^nginx$/.test(n))              return 'Nginx';
+    if (/^redis-server$/.test(n))       return 'Redis';
+    if (/^mongod$/.test(n))             return 'MongoDB';
+    if (/^mysqld?$/.test(n))            return 'MySQL';
+    if (/^deno$/.test(n))               return 'Deno';
+    if (/^bun$/.test(n))                return 'Bun';
+    return _truncate(n, 20);
 }
 
 function _formatRuntime(ms) {

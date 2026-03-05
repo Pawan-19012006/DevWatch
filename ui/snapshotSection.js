@@ -1,10 +1,10 @@
 /**
  * DevWatch — ui/snapshotSection.js  (v2)
  *
- * Section: "Saved Dev Sessions"
+ * Section: "Dev Sessions"
  *
- * Save, load, and delete workspace snapshots.
- *   before-refactor   03 Mar 14:30   3 apps   [Load] [✕]
+ * Save, restore, and delete workspace snapshots.
+ *   before-refactor   03 Mar 14:30   3 apps   [Restore] [Delete]
  */
 
 import St from 'gi://St';
@@ -23,7 +23,7 @@ export function buildSnapshotSection(menu, snapshots, callbacks) {
     const titleItem = new PopupMenu.PopupMenuItem('', { reactive: false });
     titleItem._devwatchSection = SECTION_TAG;
     const titleRow = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
-    titleRow.add_child(new St.Label({ text: _('Saved Dev Sessions'), style_class: 'dw-section-label' }));
+    titleRow.add_child(new St.Label({ text: _('Dev Sessions'), style_class: 'dw-section-label' }));
 
     const saveBtn = new St.Button({
         label: _('Save Current'),
@@ -83,11 +83,11 @@ function _buildRow(snap, onRestore, onDelete) {
         }));
     }
 
-    const loadBtn = new St.Button({ label: 'Load', style_class: 'dw-btn-load', reactive: true, can_focus: true, track_hover: true });
-    loadBtn.connect('clicked', () => onRestore?.(snap.filename));
-    row.add_child(loadBtn);
+    const restoreBtn = new St.Button({ label: 'Restore', style_class: 'dw-btn-load', reactive: true, can_focus: true, track_hover: true });
+    restoreBtn.connect('clicked', () => onRestore?.(snap.filename));
+    row.add_child(restoreBtn);
 
-    const delBtn = new St.Button({ label: '✕', style_class: 'dw-btn-delete', reactive: true, can_focus: true, track_hover: true });
+    const delBtn = new St.Button({ label: 'Delete', style_class: 'dw-btn-delete', reactive: true, can_focus: true, track_hover: true });
     delBtn.connect('clicked', () => onDelete?.(snap.filename));
     row.add_child(delBtn);
 

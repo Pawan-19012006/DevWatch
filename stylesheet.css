@@ -43,6 +43,28 @@
     background-color: rgba(255,255,255,0.08);
 }
 
+/* ── Summary quick-action buttons ─────────────────────────────────────────── */
+.dw-summary-action-btn {
+    font-size: 10px;
+    color: #78aeed;
+    padding: 2px 9px;
+    border-radius: 5px;
+    background-color: rgba(120,174,237,0.08);
+    margin-top: 3px;
+}
+.dw-summary-action-btn:hover {
+    color: #b0d0f7;
+    background-color: rgba(120,174,237,0.18);
+}
+.dw-summary-action-danger {
+    color: #f8e45c;
+    background-color: rgba(248,228,92,0.08);
+}
+.dw-summary-action-danger:hover {
+    color: #ed333b;
+    background-color: rgba(237,51,59,0.14);
+}
+
 /* ── Section headers ───────────────────────────────────────────────────────── */
 .dw-section-label {
     font-size: 10px;
@@ -130,6 +152,12 @@
 }
 
 /* ── Port section ──────────────────────────────────────────────────────────── */
+.dw-port-project {
+    font-size: 13px;
+    font-weight: bold;
+    color: #dddddd;
+    y-align: center;
+}
 .dw-port-number {
     font-size: 13px;
     font-weight: bold;
@@ -236,6 +264,7 @@
 
 /* ── Build section ─────────────────────────────────────────────────────────── */
 .dw-build-active-icon { color: #f8e45c; font-size: 14px; width: 20px; y-align: center; }
+.dw-build-status      { font-size: 13px; font-weight: bold; color: #f8e45c; y-align: center; }
 .dw-build-active-cpu  { font-size: 11px; color: #ff7800; font-weight: bold; width: 52px; y-align: center; }
 .dw-build-ok-icon     { color: #57e389; font-size: 12px; width: 20px; y-align: center; }
 .dw-build-fail-icon   { color: #555555; font-size: 12px; width: 20px; y-align: center; }

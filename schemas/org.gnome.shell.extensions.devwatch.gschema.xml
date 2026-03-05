@@ -59,5 +59,15 @@
       <range min="1" max="20"/>
     </key>
 
+    <!-- ── Keyboard shortcut ─────────────────────────────────────────── -->
+    <key name="open-devwatch" type="as">
+      <default>['&lt;Super&gt;d']</default>
+      <summary>Keyboard shortcut to open DevWatch panel</summary>
+      <description>
+        Key binding to toggle the DevWatch panel dropdown open/closed.
+        Default is Super+D. Set to an empty array to disable.
+      </description>
+    </key>
+
   </schema>
 </schemalist>

@@ -5,7 +5,8 @@
  *
  *   DevWatch                               [↻]
  *   4 projects running · 3 ports open · 4.1 GB RAM
- *   ⚠ Campus-Inventory-Management RAM high (3.3 GB)
+ *   [Clean Dev Environment]   [Stop All]
+ *   ⚠ tracktite RAM high (3.1 GB)
  */
 
 import St from 'gi://St';
@@ -15,12 +16,15 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 const SECTION_TAG = 'devwatch-summary';
 
 /**
- * @param {PopupMenu.PopupMenu} menu
- * @param {Map<string, object>}  projectMap
- * @param {{ ports: object[] }}  portResult
- * @param {() => void}           onRefresh
+ * @param {PopupMenu.PopupMenu}      menu
+ * @param {Map<string, object>}      projectMap
+ * @param {{ ports: object[] }}      portResult
+ * @param {{ candidates: object[] }} cleanupResult
+ * @param {() => void}               onRefresh
+ * @param {() => void}               onStopAll
+ * @param {() => void}               onCleanAll
  */
-export function buildHealthSummary(menu, projectMap, portResult, onRefresh) {
+export function buildHealthSummary(menu, projectMap, portResult, cleanupResult, onRefresh, onStopAll, onCleanAll) {
     clearHealthSummary(menu);
 
     const item = new PopupMenu.PopupBaseMenuItem({ reactive: false });
@@ -32,23 +36,46 @@ export function buildHealthSummary(menu, projectMap, portResult, onRefresh) {
         y_align: Clutter.ActorAlign.START,
     });
 
-    // ── Left column: title + stats ─────────────────────────────────────────
+    // ── Left column: title + stats + actions ──────────────────────────────
     const infoBox = new St.BoxLayout({
         vertical: true,
         x_expand: true,
-        y_align: Clutter.ActorAlign.CENTER
-    })
-    infoBox.spacing = 2;
+        y_align: Clutter.ActorAlign.CENTER,
+    });
+    infoBox.spacing = 3;
+
     infoBox.add_child(new St.Label({ text: 'DevWatch', style_class: 'dw-summary-title' }));
 
     // stats line: "4 projects running · 3 ports open · 4.1 GB RAM"
     const statsLine = _buildStatsLine(projectMap, portResult);
     infoBox.add_child(new St.Label({ text: statsLine, style_class: 'dw-summary-stats' }));
 
-    // alert line: high-RAM / high-CPU projects
-    const alertLine = _buildAlertLine(projectMap);
-    if (alertLine) {
-        infoBox.add_child(new St.Label({ text: alertLine, style_class: 'dw-summary-alert' }));
+    // quick action buttons: [Clean Dev Environment]  [Stop All]
+    const actionsRow = new St.BoxLayout({ x_expand: false });
+    actionsRow.spacing = 6;
+
+    const cleanBtn = new St.Button({
+        label: 'Clean Dev Environment',
+        style_class: 'dw-summary-action-btn',
+        reactive: true, can_focus: true, track_hover: true,
+    });
+    cleanBtn.connect('clicked', () => onCleanAll?.());
+    actionsRow.add_child(cleanBtn);
+
+    const stopAllBtn = new St.Button({
+        label: 'Stop All',
+        style_class: 'dw-summary-action-btn dw-summary-action-danger',
+        reactive: true, can_focus: true, track_hover: true,
+    });
+    stopAllBtn.connect('clicked', () => onStopAll?.());
+    actionsRow.add_child(stopAllBtn);
+
+    infoBox.add_child(actionsRow);
+
+    // proactive alert lines: port conflicts, memory spikes, zombies
+    const alertLines = _buildAlertLines(projectMap, cleanupResult);
+    for (const line of alertLines) {
+        infoBox.add_child(new St.Label({ text: line, style_class: 'dw-summary-alert' }));
     }
 
     outerBox.add_child(infoBox);
@@ -98,15 +125,30 @@ function _buildStatsLine(projectMap, portResult) {
     return parts.join('  ·  ');
 }
 
-function _buildAlertLine(projectMap) {
-    if (!projectMap) return null;
+function _buildAlertLines(projectMap, cleanupResult) {
     const alerts = [];
-    for (const p of projectMap.values()) {
-        const ramGb = p.totalMemKb / 1024 / 1024;
-        if (p.totalCpuPercent > 80)  alerts.push(`⚠ ${p.name} CPU high (${p.totalCpuPercent.toFixed(0)}%)`);
-        else if (ramGb > 2)          alerts.push(`⚠ ${p.name} RAM high (${ramGb.toFixed(1)} GB)`);
+
+    // High CPU / RAM per project
+    if (projectMap) {
+        for (const p of projectMap.values()) {
+            const ramGb = (p.totalMemKb ?? 0) / 1024 / 1024;
+            if (p.totalCpuPercent > 80)
+                alerts.push(`⚠  ${p.name}  CPU high (${p.totalCpuPercent.toFixed(0)}%)`);
+            else if (ramGb > 2)
+                alerts.push(`⚠  ${p.name}  RAM high (${ramGb.toFixed(1)} GB)`);
+        }
     }
-    return alerts.length ? alerts.slice(0, 2).join('   ') : null;
+
+    // Zombie / orphan processes from cleanup engine
+    const candidates = cleanupResult?.candidates ?? [];
+    const zombies = candidates.filter(c => c.reason === 'zombie');
+    const orphans = candidates.filter(c => c.reason === 'orphan');
+    if (zombies.length > 0)
+        alerts.push(`⚠  ${zombies.length} zombie process${zombies.length !== 1 ? 'es' : ''} detected`);
+    if (orphans.length > 0)
+        alerts.push(`⚠  ${orphans.length} orphan process${orphans.length !== 1 ? 'es' : ''} running`);
+
+    return alerts.slice(0, 3);
 }
 
 function _formatKb(kb) {

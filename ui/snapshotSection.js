@@ -72,11 +72,15 @@ function _buildRow(snap, onRestore, onDelete) {
     row.add_child(new St.Label({ text: _truncate(snap.label ?? 'auto', 22), style_class: 'dw-snap-name' }));
     row.add_child(new St.Label({ text: _formatDate(snap.savedAt), style_class: 'dw-snap-meta' }));
 
-    if (snap.projectCount != null) {
+    // Show "2 projects · 4 services" or just project count for v1 snapshots
+    const parts = [];
+    if (snap.projectCount != null) parts.push(`${snap.projectCount} project${snap.projectCount !== 1 ? 's' : ''}`);
+    if (snap.serviceCount)         parts.push(`${snap.serviceCount} service${snap.serviceCount !== 1 ? 's' : ''}`);
+    if (parts.length > 0) {
         row.add_child(new St.Label({
-            text: `${snap.projectCount} app${snap.projectCount !== 1 ? 's' : ''}`,
+            text: parts.join('  ·  '),
             style_class: 'dw-muted',
-            width: 46,
+            x_expand: true,
             y_align: Clutter.ActorAlign.CENTER,
         }));
     }

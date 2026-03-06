@@ -4,8 +4,8 @@
  * Pillar 4 — Dev Session Snapshot & Restore
  *
  * Captures the current developer session state (active projects, git branches,
- * open ports) as a JSON file and can restore it later by reopening terminal
- * windows at each saved project root.
+ * open ports, and the exact commands used to run each service) as a JSON file
+ * and can restore it later by relaunching those commands in the correct dirs.
  *
  * Storage layout
  * ──────────────
@@ -14,10 +14,10 @@
  *     2026-03-03_09-15-00_auto.json
  *     …
  *
- * Snapshot schema (version 1)
+ * Snapshot schema (version 2)
  * ───────────────────────────
  *   {
- *     version    : 1,
+ *     version    : 2,
  *     label      : string,          // user-supplied or "auto"
  *     savedAt    : ISO-8601 string,
  *     savedAtMs  : number,          // Date.now()
@@ -29,8 +29,16 @@
  *     root         : string,        // absolute project root path
  *     name         : string,        // basename of root
  *     branch       : string | null, // current git branch (null if not a git repo)
- *     processNames : string[],      // unique process names at snapshot time
+ *     processNames : string[],      // unique process names at snapshot time (legacy)
  *     totalMemKb   : number,
+ *     services     : ServiceSnap[], // NEW in v2 — launchable service records
+ *   }
+ *
+ *   ServiceSnap {
+ *     cmdline  : string,        // full command as string (e.g. "python manage.py runserver")
+ *     argv     : string[],      // tokenised argv for direct exec (no shell quoting issues)
+ *     cwd      : string,        // working directory the process was started from
+ *     port     : number | null, // port the service is bound to (null if unbound / unknown)
  *   }
  *
  *   PortSnap {
@@ -47,7 +55,7 @@
  *   const snap = await mgr.save(projectMap, portResult, 'before-refactor');
  *   const list = await mgr.list();      // newest first
  *   const data = await mgr.load(list[0].filename);
- *   await mgr.restore(data);            // opens gnome-terminal at each root
+ *   await mgr.restore(data);            // relaunches saved services
  *   await mgr.delete(list[0].filename);
  */
 
@@ -58,7 +66,7 @@ import { execCommunicate, isCancelledError } from '../utils/subprocess.js';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
-const SNAPSHOT_VERSION = 1;
+const SNAPSHOT_VERSION = 2;
 
 /** Maximum number of saved snapshots to keep on disk (oldest pruned). */
 const MAX_SNAPSHOTS = 20;
@@ -111,16 +119,43 @@ export class SnapshotManager {
         );
         const branchMap = new Map(roots.map((r, i) => [r, branches[i]]));
 
+        // Build a pid→port map from the port scan result so we can annotate
+        // each service with the port it was listening on at save time.
+        const pidToPort = new Map();
+        for (const r of (portResult?.ports ?? [])) {
+            if (r.pid && !pidToPort.has(r.pid)) pidToPort.set(r.pid, r.port);
+        }
+
         // Build ProjectSnap array
         const projects = roots.map(root => {
             const pd = projectMap.get(root);
             const names = [...new Set((pd?.processes ?? []).map(p => p.name))];
+
+            // Build ServiceSnap array — one entry per distinct cmdline.
+            // Filter out bare shell launchers and kernel threads (no cmdline).
+            const seenArgv = new Set();
+            const services = [];
+            for (const proc of (pd?.processes ?? [])) {
+                const argv = _normaliseArgv(proc.cmdline);
+                if (!argv) continue;
+                const key = argv.join('\0');
+                if (seenArgv.has(key)) continue;
+                seenArgv.add(key);
+                services.push({
+                    cmdline: argv.join(' '),
+                    argv,
+                    cwd:  proc.cwd ?? root,
+                    port: pidToPort.get(proc.pid) ?? null,
+                });
+            }
+
             return {
                 root,
                 name:         pd?.name ?? GLib.path_get_basename(root),
                 branch:       branchMap.get(root) ?? null,
                 processNames: names,
                 totalMemKb:   pd?.totalMemKb ?? 0,
+                services,
             };
         });
 
@@ -146,7 +181,8 @@ export class SnapshotManager {
         await this._pruneOldSnapshots();
 
         console.log(`[DevWatch:SnapshotManager] Saved snapshot: ${filename}`);
-        return { filename, label, savedAt: isoNow, projectCount: projects.length };
+        const totalServices = projects.reduce((n, p) => n + (p.services?.length ?? 0), 0);
+        return { filename, label, savedAt: isoNow, projectCount: projects.length, serviceCount: totalServices };
     }
 
     /**
@@ -185,6 +221,21 @@ export class SnapshotManager {
             if (meta) metas.push(meta);
         }
         enumerator.close(null);
+
+        // Enrich metas with service/project counts from the file contents
+        for (const meta of metas) {
+            try {
+                const path = GLib.build_filenamev([this._snapshotDir, meta.filename]);
+                const [, raw] = Gio.File.new_for_path(path).load_contents(null);
+                const data = JSON.parse(new TextDecoder().decode(raw));
+                meta.projectCount  = data.projects?.length ?? 0;
+                meta.serviceCount  = (data.projects ?? [])
+                    .reduce((n, p) => n + (p.services?.length ?? 0), 0);
+            } catch (_) {
+                meta.projectCount = meta.projectCount ?? 0;
+                meta.serviceCount = 0;
+            }
+        }
 
         // Newest first
         metas.sort((a, b) => b.savedAt.localeCompare(a.savedAt));
@@ -371,4 +422,40 @@ function _filenameToMeta(filename) {
     const savedAt = `${datePart}T${timeIso}`;
 
     return { filename, label, savedAt };
+}
+
+/**
+ * Normalise a process cmdline array into a clean, launchable argv.
+ *
+ * Returns null for entries that should not be persisted as services:
+ *  - kernel threads / empty cmdlines
+ *  - bare interactive shells (bash, zsh, sh, fish …)
+ *  - gnome-shell itself
+ *
+ * @param {string[] | null | undefined} cmdline  Raw /proc/<pid>/cmdline tokens
+ * @returns {string[] | null}
+ */
+function _normaliseArgv(cmdline) {
+    if (!cmdline || cmdline.length === 0) return null;
+
+    // Strip interpreter paths — keep only the basename for the first token
+    const argv = cmdline.map(t => t.trim()).filter(Boolean);
+    if (argv.length === 0) return null;
+
+    const bin = argv[0].replace(/.*\//, ''); // basename
+
+    // Skip plain shells with no arguments (interactive terminals)
+    const SHELL_BINS  = new Set(['bash', 'sh', 'zsh', 'fish', 'dash', 'tcsh', 'ksh']);
+    // Skip system noise that shouldn't be relaunched
+    const SYSTEM_BINS = new Set([
+        'gnome-shell', 'systemd', 'dbus-daemon', 'Xwayland',
+        'gjs', 'gvfsd', 'at-spi-bus-launcher',
+    ]);
+
+    if (SYSTEM_BINS.has(bin)) return null;
+    if (SHELL_BINS.has(bin) && argv.length === 1) return null;
+    // Shell launched with -c "..." or similar — keep it, it runs a real command
+    if (SHELL_BINS.has(bin) && argv.length > 1) return argv;
+
+    return argv;
 }

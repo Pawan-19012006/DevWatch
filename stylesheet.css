@@ -353,6 +353,19 @@
     width: 80px;
 }
 
+/* Last Workspace sticky entry                                               */
+.dw-last-workspace {
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    margin-bottom: 4px;
+    padding-bottom: 6px;
+}
+.dw-last-workspace-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #78aeed;
+    y-align: center;
+}
+
 /* Inline session name entry — shown when Save is clicked                   */
 .dw-snap-entry {
     font-size: 12px;

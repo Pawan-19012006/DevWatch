@@ -76,6 +76,10 @@ const SNAPSHOT_VERSION = 2;
 /** Maximum number of saved snapshots to keep on disk (oldest pruned). */
 const MAX_SNAPSHOTS = 20;
 
+/** Fixed filename for the auto-saved "last workspace" — never timestamped, always overwritten. */
+const LAST_WORKSPACE_FILENAME = '_last_workspace_.json';
+const LAST_WORKSPACE_LABEL    = '__last_workspace__';
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export class SnapshotManager {
@@ -111,87 +115,54 @@ export class SnapshotManager {
      * @returns {Promise<SnapshotMeta>}  Metadata about the saved snapshot.
      */
     async save(projectMap, portResult, label = 'auto') {
-        const now     = new Date();
-        const isoNow  = now.toISOString();
-        const stamp   = _dateToStamp(now);
+        const now       = new Date();
+        const isoNow    = now.toISOString();
+        const stamp     = _dateToStamp(now);
         const safeLabel = label.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40);
         const filename  = `${stamp}_${safeLabel}.json`;
 
-        // Resolve git branches for all project roots concurrently
-        const roots = [...(projectMap?.keys() ?? [])];
-        const branches = await Promise.all(
-            roots.map(root => this._gitBranch(root))
-        );
-        const branchMap = new Map(roots.map((r, i) => [r, branches[i]]));
-
-        // Build a pid→port map from the port scan result so we can annotate
-        // each service with the port it was listening on at save time.
-        const pidToPort = new Map();
-        for (const r of (portResult?.ports ?? [])) {
-            if (r.pid && !pidToPort.has(r.pid)) pidToPort.set(r.pid, r.port);
-        }
-
-        // Build ProjectSnap array
-        const projects = roots.map(root => {
-            const pd = projectMap.get(root);
-            const names = [...new Set((pd?.processes ?? []).map(p => p.name))];
-
-            // Build ServiceSnap array — one entry per distinct cmdline.
-            // Filter out bare shell launchers and kernel threads (no cmdline).
-            const seenArgv = new Set();
-            const services = [];
-            for (const proc of (pd?.processes ?? [])) {
-                const argv = _normaliseArgv(proc.cmdline);
-                if (!argv) continue;
-                const key = argv.join('\0');
-                if (seenArgv.has(key)) continue;
-                seenArgv.add(key);
-                services.push({
-                    cmdline: argv.join(' '),
-                    argv,
-                    cwd:  proc.cwd ?? root,
-                    port: pidToPort.get(proc.pid) ?? null,
-                });
-            }
-
-            // Build EditorSnap array — which IDEs had this project open?
-            const editors = _detectEditors(pd?.processes ?? []);
-
-            return {
-                root,
-                name:         pd?.name ?? GLib.path_get_basename(root),
-                branch:       branchMap.get(root) ?? null,
-                processNames: names,
-                totalMemKb:   pd?.totalMemKb ?? 0,
-                services,
-                editors,
-            };
-        });
-
-        // Build PortSnap array
-        const ports = (portResult?.ports ?? []).map(r => ({
-            port:        r.port,
-            protocol:    r.protocol,
-            processName: r.processName ?? null,
-            projectRoot: r.projectRoot ?? null,
-            isDevPort:   r.isDevPort,
-        }));
-
-        const snapshot = {
-            version:   SNAPSHOT_VERSION,
-            label,
-            savedAt:   isoNow,
-            savedAtMs: now.valueOf(),
-            projects,
-            ports,
-        };
-
+        const snapshot = await this._buildSnapshot(projectMap, portResult, label);
         await this._writeJson(filename, snapshot);
         await this._pruneOldSnapshots();
 
         console.log(`[DevWatch:SnapshotManager] Saved snapshot: ${filename}`);
-        const totalServices = projects.reduce((n, p) => n + (p.services?.length ?? 0), 0);
-        return { filename, label, savedAt: isoNow, projectCount: projects.length, serviceCount: totalServices };
+        const totalServices = snapshot.projects.reduce((n, p) => n + (p.services?.length ?? 0), 0);
+        return { filename, label, savedAt: isoNow, projectCount: snapshot.projects.length, serviceCount: totalServices };
+    }
+
+    /**
+     * Auto-save the current workspace to the fixed "last workspace" file.
+     * Overwrites on every call — no accumulation, no prune needed.
+     * Safe to fire-and-forget: errors are logged but never thrown.
+     *
+     * @param {Map} projectMap
+     * @param {object} portResult
+     * @returns {Promise<void>}
+     */
+    async saveLastWorkspace(projectMap, portResult) {
+        // Skip if there is nothing meaningful to capture
+        if (!projectMap || projectMap.size === 0) return;
+        try {
+            const snapshot = await this._buildSnapshot(projectMap, portResult, LAST_WORKSPACE_LABEL);
+            await this._writeJson(LAST_WORKSPACE_FILENAME, snapshot);
+            console.log('[DevWatch:SnapshotManager] Auto-saved last workspace');
+        } catch (e) {
+            console.warn('[DevWatch:SnapshotManager] saveLastWorkspace() failed:', e.message);
+        }
+    }
+
+    /**
+     * Load the last workspace snapshot, or null if none exists.
+     * @returns {object|null}
+     */
+    loadLastWorkspace() {
+        const path = GLib.build_filenamev([this._snapshotDir, LAST_WORKSPACE_FILENAME]);
+        try {
+            const [, raw] = Gio.File.new_for_path(path).load_contents(null);
+            return JSON.parse(new TextDecoder().decode(raw));
+        } catch (_) {
+            return null;
+        }
     }
 
     /**
@@ -226,6 +197,8 @@ export class SnapshotManager {
         while ((info = enumerator.next_file(null)) !== null) {
             const name = info.get_name();
             if (!name.endsWith('.json')) continue;
+            // The last-workspace file is surfaced separately — skip it here
+            if (name === LAST_WORKSPACE_FILENAME) continue;
             const meta = _filenameToMeta(name);
             if (meta) metas.push(meta);
         }
@@ -519,6 +492,72 @@ export class SnapshotManager {
         } catch (_) {
             return null;
         }
+    }
+
+    /**
+     * Build the core snapshot data object (shared by save() and saveLastWorkspace()).
+     * @private
+     */
+    async _buildSnapshot(projectMap, portResult, label) {
+        const now    = new Date();
+        const isoNow = now.toISOString();
+
+        const roots = [...(projectMap?.keys() ?? [])];
+        const branches = await Promise.all(roots.map(root => this._gitBranch(root)));
+        const branchMap = new Map(roots.map((r, i) => [r, branches[i]]));
+
+        const pidToPort = new Map();
+        for (const r of (portResult?.ports ?? []))
+            if (r.pid && !pidToPort.has(r.pid)) pidToPort.set(r.pid, r.port);
+
+        const projects = roots.map(root => {
+            const pd    = projectMap.get(root);
+            const names = [...new Set((pd?.processes ?? []).map(p => p.name))];
+
+            const seenArgv = new Set();
+            const services = [];
+            for (const proc of (pd?.processes ?? [])) {
+                const argv = _normaliseArgv(proc.cmdline);
+                if (!argv) continue;
+                const key = argv.join('\0');
+                if (seenArgv.has(key)) continue;
+                seenArgv.add(key);
+                services.push({
+                    cmdline: argv.join(' '),
+                    argv,
+                    cwd:  proc.cwd ?? root,
+                    port: pidToPort.get(proc.pid) ?? null,
+                });
+            }
+
+            const editors = _detectEditors(pd?.processes ?? []);
+            return {
+                root,
+                name:         pd?.name ?? GLib.path_get_basename(root),
+                branch:       branchMap.get(root) ?? null,
+                processNames: names,
+                totalMemKb:   pd?.totalMemKb ?? 0,
+                services,
+                editors,
+            };
+        });
+
+        const ports = (portResult?.ports ?? []).map(r => ({
+            port:        r.port,
+            protocol:    r.protocol,
+            processName: r.processName ?? null,
+            projectRoot: r.projectRoot ?? null,
+            isDevPort:   r.isDevPort,
+        }));
+
+        return {
+            version:   SNAPSHOT_VERSION,
+            label,
+            savedAt:   isoNow,
+            savedAtMs: now.valueOf(),
+            projects,
+            ports,
+        };
     }
 
     /**

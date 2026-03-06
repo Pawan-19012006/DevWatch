@@ -15,7 +15,7 @@ import { _ } from '../utils/i18n.js';
 const SECTION_TAG = 'devwatch-snapshots';
 const MAX_ROWS = 5;
 
-export function buildSnapshotSection(menu, snapshots, callbacks) {
+export function buildSnapshotSection(menu, snapshots, callbacks, lastWorkspace = null) {
     clearSnapshotSection(menu);
     const { onSave, onRestore, onDelete } = callbacks ?? {};
 
@@ -102,6 +102,11 @@ export function buildSnapshotSection(menu, snapshots, callbacks) {
     sub.menu.addMenuItem(namingItem, 0); // insert at top of sub-menu
     namingItem.visible = false;
 
+    // ── Sticky "Last Workspace" entry (auto-saved on every poll + shutdown) ─────
+    if (lastWorkspace) {
+        sub.menu.addMenuItem(_buildLastWorkspaceRow(lastWorkspace, onRestore));
+    }
+
     if (!snapshots || snapshots.length === 0) {
         const empty = new PopupMenu.PopupMenuItem(_('  No saved sessions yet — click Save'), { reactive: false });
         empty.label.style_class = 'dw-dim';
@@ -173,6 +178,57 @@ function _buildRow(snap, onRestore, onDelete) {
     line2.add_child(delBtn);
 
     outer.add_child(line2);
+    item.add_child(outer);
+    item.label.hide();
+    return item;
+}
+
+function _buildLastWorkspaceRow(snap, onRestore) {
+    const item = new PopupMenu.PopupMenuItem('', { reactive: false });
+    item.add_style_class_name('dw-last-workspace');
+    const outer = new St.BoxLayout({ vertical: true, x_expand: true });
+    outer.spacing = 2;
+
+    // Line 1: icon + label + timestamp + Resume button
+    const line1 = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
+    line1.spacing = 8;
+    line1.add_child(new St.Label({
+        text: '↺  Last Workspace',
+        style_class: 'dw-last-workspace-label',
+        x_expand: true,
+        y_align: Clutter.ActorAlign.CENTER,
+    }));
+    const savedAt = snap.savedAt ? _formatDate(snap.savedAt) : '';
+    if (savedAt) line1.add_child(new St.Label({ text: savedAt, style_class: 'dw-snap-meta', y_align: Clutter.ActorAlign.CENTER }));
+    const resumeBtn = new St.Button({
+        label: 'Resume',
+        style_class: 'dw-btn-load',
+        reactive: true, can_focus: true, track_hover: true,
+        y_align: Clutter.ActorAlign.CENTER,
+    });
+    resumeBtn.connect('clicked', () => {
+        resumeBtn.label = 'Resuming…';
+        resumeBtn.reactive = false;
+        onRestore?.('_last_workspace_.json');
+    });
+    line1.add_child(resumeBtn);
+    outer.add_child(line1);
+
+    // Line 2: summary counts
+    const projects = snap.projects ?? [];
+    const pc = projects.length;
+    const sc = projects.reduce((n, p) => n + (p.services?.length ?? 0), 0);
+    const ec = projects.reduce((n, p) => n + (p.editors?.length  ?? 0), 0);
+    const parts = [];
+    if (pc) parts.push(`${pc} project${pc !== 1 ? 's' : ''}`);
+    if (sc) parts.push(`${sc} service${sc !== 1 ? 's' : ''}`);
+    if (ec) parts.push(`${ec} editor${ec !== 1 ? 's' : ''}`);
+    if (parts.length > 0) {
+        const line2 = new St.BoxLayout({ x_expand: true });
+        line2.add_child(new St.Label({ text: parts.join('  ·  '), style_class: 'dw-muted', x_expand: true }));
+        outer.add_child(line2);
+    }
+
     item.add_child(outer);
     item.label.hide();
     return item;

@@ -191,6 +191,14 @@ export default class DevWatchExtension extends Extension {
             this._menuOpenSignalId = null;
         }
 
+        // Auto-save the last workspace state before tearing down so it
+        // survives a reboot / session restart and can be resumed next time.
+        if (this._snapshotManager && this._lastProjectMap?.size) {
+            this._snapshotManager
+                .saveLastWorkspace(this._lastProjectMap, this._lastPortResult ?? { ports: [] })
+                .catch(() => {});
+        }
+
         // Stop core modules
         this._projectDetector?.stop();
         this._projectDetector = null;
@@ -274,9 +282,10 @@ export default class DevWatchExtension extends Extension {
         this._lastProjectMap = projectMap;
         this._lastPortResult = portResult;
 
-        // Fetch snapshot list (async, best-effort — never blocks the UI)
+        // Fetch snapshot list + last workspace (synchronous read, best-effort)
         try {
-            this._snapshots = await this._snapshotManager.list();
+            this._snapshots      = await this._snapshotManager.list();
+            this._lastWorkspace  = this._snapshotManager.loadLastWorkspace();
         } catch (e) {
             if (!this._isCancelled(e)) this._logError(e);
         }
@@ -340,12 +349,17 @@ export default class DevWatchExtension extends Extension {
                 onSave:    (label) => this._saveSnapshot(label),
                 onRestore: fn  => this._restoreSnapshot(fn),
                 onDelete:  fn  => this._deleteSnapshot(fn),
-            }
+            },
+            this._lastWorkspace ?? null
         );
         buildPerfSection(this._indicator.menu, buildResult, maxBuildHistory);
 
         // Update status dot colour
         this._updateStatusDot(projectMap, portResult, cleanupResult, buildResult);
+
+        // Auto-save last workspace (fire-and-forget — never blocks the UI)
+        this._snapshotManager?.saveLastWorkspace(projectMap, portResult)
+            .catch(e => this._logError(e));
     }
 
     /**

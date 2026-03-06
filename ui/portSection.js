@@ -103,7 +103,7 @@ function _buildRow(record, onKill) {
 
     const detail = _buildDetail(record);
     line2.add_child(new St.Label({
-        text: detail,
+        text: detail ?? '',
         style_class: 'dw-port-detail',
         x_expand: true,
         y_align: Clutter.ActorAlign.CENTER,
@@ -134,6 +134,8 @@ function _buildRow(record, onKill) {
 function _buildDetail(record) {
     const portPart = `Port ${record.port}`;
     const procPart = record.processName ? _toServiceLabel(record.processName) : null;
+    // When line 1 already shows "Port X" (no project, no process), avoid repeating it
+    if (!record.projectRoot && !record.processName) return null;
     if (procPart) return `${portPart}  ·  ${procPart}`;
     return portPart;
 }

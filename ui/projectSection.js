@@ -76,6 +76,8 @@ export function clearProjectSection(menu) {
 function _buildProjectRow(project, pidToPort) {
     const sub = new PopupMenu.PopupSubMenuMenuItem('', true);
     sub.label.text = '';
+    // Override theme grey card with transparent background (inline style wins over CSS cascade)
+    sub.menu.actor.set_style('background-color: transparent; border-radius: 0;');
 
     // ── Level 1 header (vertical: name on L1, stats on L2) ──────────────
     const header = new St.BoxLayout({ vertical: true, x_expand: true });
@@ -103,8 +105,7 @@ function _buildProjectRow(project, pidToPort) {
     }));
 
     sub.label.get_parent().insert_child_above(header, sub.label);
-
-    // ── Level 2: service list ──────────────────────────────────────────────
+    sub.label.hide();
     const services = _toServices(project, pidToPort);
     for (const svc of services) {
         sub.menu.addMenuItem(_buildServiceRow(svc));
@@ -147,20 +148,24 @@ function _buildProjectRow(project, pidToPort) {
 
 function _buildServiceRow(svc) {
     const item = new PopupMenu.PopupMenuItem('', { reactive: false });
-    const row  = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER})
+    const row  = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
     row.spacing = 8;
 
-    row.add_child(new St.Label({ text: svc.displayName, style_class: 'dw-service-name' }));
+    // State dot as prefix (coloured ●/○/✕)
+    row.add_child(new St.Label({
+        text: svc.stateSymbol,
+        style_class: `dw-proc-state ${svc.stateClass}`,
+        y_align: Clutter.ActorAlign.CENTER,
+    }));
 
-    if (svc.port) {
-        row.add_child(new St.Label({ text: `Port ${svc.port}`, style_class: 'dw-service-port' }));
-    }
-    if (svc.state) {
-        row.add_child(new St.Label({
-            text: svc.stateSymbol,
-            style_class: `dw-proc-state ${svc.stateClass}`,
-        }));
-    }
+    // Combined "Python Server · Port 8000" — single label avoids layout gaps
+    const text = svc.port ? `${svc.displayName}  ·  Port ${svc.port}` : svc.displayName;
+    row.add_child(new St.Label({
+        text,
+        style_class: 'dw-service-row',
+        x_expand: true,
+        y_align: Clutter.ActorAlign.CENTER,
+    }));
 
     item.add_child(row);
     item.label.hide();

@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════════
- * DevWatch — stylesheet.css   (v6 — remove grey card, hierarchy, rhythm)
+ * DevWatch — stylesheet.css   (v7 — service rows, row padding, no duplication)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ── Panel menu width ──────────────────────────────────────────────────────── */
@@ -14,6 +14,12 @@
     margin: 0;
     padding-top: 0;
     padding-bottom: 0;
+}
+
+/* Consistent row padding for all items inside our menu */
+.devwatch-menu .popup-menu-item {
+    padding-top: 5px;
+    padding-bottom: 5px;
 }
 
 /* ── Panel bar ─────────────────────────────────────────────────────────────── */
@@ -146,6 +152,14 @@
 .dw-project-dot-red    { color: #ed333b; }
 
 .dw-service-name {
+    font-size: 12px;
+    color: #cccccc;
+    x-expand: true;
+    y-align: center;
+    min-height: 28px;
+}
+/* Combined service label: "Python Server · Port 8000" */
+.dw-service-row {
     font-size: 12px;
     color: #cccccc;
     x-expand: true;

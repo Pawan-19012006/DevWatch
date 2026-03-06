@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════════
- * DevWatch — stylesheet.css   (v7 — service rows, row padding, no duplication)
+ * DevWatch — stylesheet.css   (v8 — project separation, open state, row clarity)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ── Panel menu width ──────────────────────────────────────────────────────── */
@@ -13,7 +13,18 @@
     box-shadow: none;
     margin: 0;
     padding-top: 0;
-    padding-bottom: 0;
+    padding-bottom: 4px;
+    padding-left: 16px;
+}
+
+/* Visual margin between project blocks (collapsed and expanded)           */
+.devwatch-menu .popup-sub-menu-item {
+    margin-bottom: 6px;
+}
+
+/* Subtle background on expanded project header (replaces harsh grey)      */
+.devwatch-menu .popup-sub-menu-item:open {
+    background-color: rgba(255,255,255,0.03);
 }
 
 /* Consistent row padding for all items inside our menu */

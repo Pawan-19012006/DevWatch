@@ -77,7 +77,9 @@ function _buildProjectRow(project, pidToPort) {
     const sub = new PopupMenu.PopupSubMenuMenuItem('', true);
     sub.label.text = '';
     // Override theme grey card with transparent background (inline style wins over CSS cascade)
-    sub.menu.actor.set_style('background-color: transparent; border-radius: 0;');
+    sub.menu.actor.set_style(
+        'background-color: transparent; border-radius: 0; padding-left: 16px;'
+    );
 
     // ── Level 1 header (vertical: name on L1, stats on L2) ──────────────
     const header = new St.BoxLayout({ vertical: true, x_expand: true });
@@ -151,12 +153,14 @@ function _buildServiceRow(svc) {
     const row  = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
     row.spacing = 8;
 
-    // State dot as prefix (coloured ●/○/✕)
-    row.add_child(new St.Label({
-        text: svc.stateSymbol,
-        style_class: `dw-proc-state ${svc.stateClass}`,
-        y_align: Clutter.ActorAlign.CENTER,
-    }));
+    // Only show state indicator for meaningful states; skip normal sleep/idle (S/I)
+    if (svc.state && svc.state !== 'S' && svc.state !== 'I') {
+        row.add_child(new St.Label({
+            text: svc.stateSymbol,
+            style_class: `dw-proc-state ${svc.stateClass}`,
+            y_align: Clutter.ActorAlign.CENTER,
+        }));
+    }
 
     // Combined "Python Server · Port 8000" — single label avoids layout gaps
     const text = svc.port ? `${svc.displayName}  ·  Port ${svc.port}` : svc.displayName;

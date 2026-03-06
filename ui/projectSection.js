@@ -88,9 +88,9 @@ function _buildProjectRow(project, pidToPort) {
     });
     header.add_child(dot);
 
-    // Project name
+    // Project name — cleaned of version numbers and package prefixes
     header.add_child(new St.Label({
-        text: project.name,
+        text: _cleanProjectName(project.name),
         style_class: 'dw-project-name',
     }));
 
@@ -210,6 +210,36 @@ function _toServices(project, pidToPort) {
     }
 
     return result;
+}
+
+/**
+ * Clean a raw project/directory name into a human-readable label.
+ * Strips version numbers, package prefixes, and converts separators to spaces.
+ */
+function _cleanProjectName(raw) {
+    if (!raw) return '';
+    // Known tool/package identifier prefixes
+    const KNOWN = new Map([
+        ['ms-python.vscode-pylance', 'Pylance Language Server'],
+        ['ms-python.python',         'Python Extension'],
+        ['ms-toolsai.jupyter',       'Jupyter Extension'],
+        ['ms-vscode.cpptools',       'C++ Extension'],
+        ['ms-vscode.eslint',         'ESLint Extension'],
+        ['dbaeumer.vscode-eslint',   'ESLint Extension'],
+        ['esbenp.prettier',          'Prettier Extension'],
+    ]);
+    const lower = raw.toLowerCase();
+    for (const [prefix, label] of KNOWN) {
+        if (lower.startsWith(prefix)) return label;
+    }
+    // Strip trailing version: foo-bar-1.2.3 → foo-bar, vscode-pylance-2026.1.1 → vscode-pylance
+    let name = raw.replace(/[-_.]?\d+\.\d+[\w.-]*$/g, '');
+    // Remove remaining leading/trailing separators
+    name = name.replace(/^[-_.]+|[-_.]+$/g, '');
+    // Replace separator runs with a single space and capitalise words
+    name = name.replace(/[-_.]+/g, ' ').trim();
+    // Capitalise first letter of each word
+    return name.replace(/\b\w/g, c => c.toUpperCase()) || raw;
 }
 
 /** Return a CSS class for the project health dot. */

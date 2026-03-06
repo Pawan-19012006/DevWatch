@@ -72,42 +72,44 @@ export function clearPortSection(menu) {
 
 function _buildRow(record, onKill) {
     const item = new PopupMenu.PopupMenuItem('', { reactive: false });
-    const row  = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
-    row.spacing = 8;
 
-    // Active dot
-    row.add_child(new St.Label({
+    // Vertical outer: line 1 = project name, line 2 = port detail + Stop
+    const outer = new St.BoxLayout({ vertical: true, x_expand: true });
+    outer.spacing = 2;
+
+    // ── Line 1: ● project-name ────────────────────────────────────────────
+    const line1 = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
+    line1.spacing = 6;
+    line1.add_child(new St.Label({
         text: '●',
         style_class: record.isDevPort ? 'dw-port-dot dw-port-dot-active' : 'dw-port-dot dw-port-dot-dim',
     }));
-
-    // Project name (bold, project-first) — derived from projectRoot or process name
     const projectLabel = record.projectRoot
-        ? _truncate(GLib.path_get_basename(record.projectRoot), 20)
-        : null;
-    if (projectLabel) {
-        row.add_child(new St.Label({
-            text: projectLabel,
-            style_class: record.isDevPort ? 'dw-port-project' : 'dw-port-number-dim',
-        }));
-    }
+        ? _truncate(GLib.path_get_basename(record.projectRoot), 22)
+        : (record.processName ? _toServiceLabel(record.processName) : `Port ${record.port}`);
+    line1.add_child(new St.Label({
+        text: projectLabel,
+        style_class: record.isDevPort ? 'dw-port-project' : 'dw-port-number-dim',
+    }));
+    outer.add_child(line1);
 
-    // "Port 8000 · Python" — description
-    const detail = _buildDetail(record, !!projectLabel);
-    row.add_child(new St.Label({
+    // ── Line 2: Port X · Process · time   [Stop] ─────────────────────────
+    const line2 = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
+    line2.spacing = 8;
+
+    const detail = _buildDetail(record);
+    line2.add_child(new St.Label({
         text: detail,
-        style_class: 'dw-port-process',
+        style_class: 'dw-port-detail',
         x_expand: true,
         y_align: Clutter.ActorAlign.CENTER,
     }));
 
-    // Uptime
     const runtime = _formatRuntime(record.runtimeMs);
     if (runtime) {
-        row.add_child(new St.Label({ text: runtime, style_class: 'dw-service-uptime' }));
+        line2.add_child(new St.Label({ text: runtime, style_class: 'dw-service-uptime' }));
     }
 
-    // Neutral Stop button — red only when something is actually broken
     if (record.pid && typeof onKill === 'function') {
         const stopBtn = new St.Button({
             label: 'Stop',
@@ -115,19 +117,17 @@ function _buildRow(record, onKill) {
             reactive: true, can_focus: true, track_hover: true,
         });
         stopBtn.connect('clicked', () => onKill(record.pid, record.port));
-        row.add_child(stopBtn);
+        line2.add_child(stopBtn);
     }
+    outer.add_child(line2);
 
-    item.add_child(row);
+    item.add_child(outer);
     item.label.hide();
     return item;
 }
 
-/**
- * Build the "Port 8000 · Python" detail string.
- * When a project name is already shown, include the process label too.
- */
-function _buildDetail(record, hasProject) {
+/** Build the "Port 8000 · Python" detail line (always shown on line 2). */
+function _buildDetail(record) {
     const portPart = `Port ${record.port}`;
     const procPart = record.processName ? _toServiceLabel(record.processName) : null;
     if (procPart) return `${portPart}  ·  ${procPart}`;

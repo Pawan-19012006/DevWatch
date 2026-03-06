@@ -81,22 +81,26 @@ export function clearPerfSection(menu) {
 function _buildActiveRow(run) {
     const item = new PopupMenu.PopupMenuItem('', { reactive: false });
     const row  = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER});
-    row.spacing = 8;
+    row.spacing = 6;
 
     row.add_child(new St.Label({ text: '⚙', style_class: 'dw-build-active-icon' }));
-    row.add_child(new St.Label({ text: 'Build Running', style_class: 'dw-build-status' }));
 
+    // "Building tracktite" — project name is the primary label
     const proj = run.projectRoot ? GLib.path_get_basename(run.projectRoot) : run.tool;
     row.add_child(new St.Label({
-        text: `Project: ${_truncate(proj, 20)}`,
-        style_class: 'dw-muted',
+        text: `Building ${_truncate(proj, 20)}`,
+        style_class: 'dw-build-status',
         x_expand: true,
         y_align: Clutter.ActorAlign.CENTER,
     }));
 
+    // Compact metadata: "27s elapsed · CPU 1%"
     const elapsedMs = Math.round((GLib.get_monotonic_time() - run.startedAt) / 1000);
-    row.add_child(new St.Label({ text: `Elapsed: ${_fmtDur(elapsedMs)}`, style_class: 'dw-muted', y_align: Clutter.ActorAlign.CENTER }));
-    row.add_child(new St.Label({ text: `CPU ${run.peakCpuPct.toFixed(0)}%`, style_class: 'dw-build-active-cpu' }));
+    row.add_child(new St.Label({
+        text: `${_fmtDur(elapsedMs)} elapsed · CPU ${run.peakCpuPct.toFixed(0)}%`,
+        style_class: 'dw-build-meta',
+        y_align: Clutter.ActorAlign.CENTER,
+    }));
 
     item.add_child(row);
     item.label.hide();

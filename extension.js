@@ -55,6 +55,7 @@ import { buildSnapshotSection } from './ui/snapshotSection.js';
 import { BuildDetector }         from './core/buildDetector.js';
 import { buildPerfSection }      from './ui/perfSection.js';
 import { buildHealthSummary, clearHealthSummary } from './ui/healthSummary.js';
+import { buildAlertsSection } from './ui/alertsSection.js';
 
 /** Fallback poll interval — used before settings load (should never be needed). */
 const DEFAULT_POLL_INTERVAL_S = 10;
@@ -150,6 +151,9 @@ export default class DevWatchExtension extends Extension {
 
         // ── Add to panel ───────────────────────────────────────────────
         Main.panel.addToStatusArea(this.uuid, this._indicator, 0, 'right');
+
+        // ── Apply panel menu min-width ─────────────────────────────────
+        this._indicator.menu.box.add_style_class_name('devwatch-menu');
 
         // ── Keyboard shortcut (Super+D) ────────────────────────────────
         try {
@@ -315,6 +319,8 @@ export default class DevWatchExtension extends Extension {
             () => this._stopAllProjects(),
             () => this._cleanEnvironment(cleanupResult)
         );
+        // Problems / Alerts section — shown only when issues exist
+        buildAlertsSection(this._indicator.menu, projectMap, portResult, cleanupResult);
         buildProjectSection(this._indicator.menu, projectMap, portResult);
         buildPortSection(
             this._indicator.menu,

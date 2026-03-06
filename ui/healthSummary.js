@@ -55,7 +55,7 @@ export function buildHealthSummary(menu, projectMap, portResult, cleanupResult, 
     actionsRow.spacing = 6;
 
     const cleanBtn = new St.Button({
-        label: 'Clean',
+        label: 'Clean Env',
         style_class: 'dw-summary-action-btn',
         reactive: true, can_focus: true, track_hover: true,
     });
@@ -63,7 +63,7 @@ export function buildHealthSummary(menu, projectMap, portResult, cleanupResult, 
     actionsRow.add_child(cleanBtn);
 
     const stopAllBtn = new St.Button({
-        label: 'Stop All',
+        label: 'Stop All Projects',
         style_class: 'dw-summary-action-btn dw-summary-action-danger',
         reactive: true, can_focus: true, track_hover: true,
     });

@@ -1,10 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════════════════
- * DevWatch — stylesheet.css   (v3 — polished control-center)
+ * DevWatch — stylesheet.css   (v4 — contrast, spacing, hierarchy)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ── Panel menu width ──────────────────────────────────────────────────────── */
 .devwatch-menu {
-    min-width: 400px;
+    min-width: 420px;
 }
 
 /* ── Panel bar ─────────────────────────────────────────────────────────────── */
@@ -74,7 +74,7 @@
 .dw-section-label {
     font-size: 10px;
     font-weight: bold;
-    color: #888888;
+    color: #bbbbbb;
     letter-spacing: 0.8px;
     x-expand: true;
     y-align: center;
@@ -119,8 +119,9 @@
 }
 .dw-project-stats {
     font-size: 11px;
-    color: #6a6a6a;
+    color: #909090;
     y-align: center;
+    padding-left: 14px;
 }
 .dw-project-dot {
     font-size: 10px;
@@ -145,18 +146,18 @@
 }
 .dw-service-uptime {
     font-size: 10px;
-    color: #555555;
+    color: #888888;
     y-align: center;
     width: 38px;
 }
 .dw-dim {
     font-size: 11px;
-    color: #545454;
+    color: #787878;
     font-style: italic;
 }
 .dw-muted {
     font-size: 10px;
-    color: #5e5e5e;
+    color: #888888;
 }
 .dw-alert-label {
     font-size: 11px;
@@ -196,7 +197,7 @@
 }
 .dw-port-detail {
     font-size: 11px;
-    color: #656565;
+    color: #8a8a8a;
     x-expand: true;
     y-align: center;
     padding-left: 15px;
@@ -278,7 +279,7 @@
 }
 .dw-snap-meta {
     font-size: 10px;
-    color: #5e5e5e;
+    color: #888888;
     y-align: center;
     width: 80px;
 }
@@ -286,11 +287,11 @@
 /* ── Build section ─────────────────────────────────────────────────────────── */
 .dw-build-active-icon { color: #f8e45c; font-size: 14px; width: 20px; y-align: center; }
 .dw-build-status      { font-size: 13px; font-weight: bold; color: #f8e45c; y-align: center; }
-.dw-build-meta        { font-size: 10px; color: #888888; y-align: center; }
+.dw-build-meta        { font-size: 10px; color: #aaaaaa; y-align: center; }
 .dw-build-active-cpu  { font-size: 11px; color: #ff7800; font-weight: bold; width: 52px; y-align: center; }
 .dw-build-ok-icon     { color: #57e389; font-size: 12px; width: 20px; y-align: center; }
 .dw-build-fail-icon   { color: #555555; font-size: 12px; width: 20px; y-align: center; }
-.dw-build-hist-hdr    { font-size: 10px; color: #545454; font-weight: bold; padding-top: 4px; }
+.dw-build-hist-hdr    { font-size: 10px; color: #888888; font-weight: bold; padding-top: 4px; }
 
 /* ── Process sub-rows ──────────────────────────────────────────────────────── */
 .dw-proc-name   { font-size: 11px; color: #b0b0b0; x-expand: true; y-align: center; }

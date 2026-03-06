@@ -26,7 +26,7 @@ export function buildPerfSection(menu, buildResult, maxRows = DEFAULT_MAX_HISTOR
     const titleItem = new PopupMenu.PopupMenuItem('', { reactive: false });
     titleItem._devwatchSection = SECTION_TAG;
     const titleRow = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
-    titleRow.add_child(new St.Label({ text: _('Current Build'), style_class: 'dw-section-label' }));
+    titleRow.add_child(new St.Label({ text: _('Build Activity'), style_class: 'dw-section-label' }));
     titleItem.add_child(titleRow);
     titleItem.label.hide();
     menu.addMenuItem(titleItem);
@@ -45,22 +45,22 @@ export function buildPerfSection(menu, buildResult, maxRows = DEFAULT_MAX_HISTOR
     const shown = histRuns.slice(0, maxRows);
 
     if (shown.length > 0) {
-        const histHeader = new PopupMenu.PopupMenuItem(_('Recent Builds'), { reactive: false });
-        histHeader.label.style_class = 'dw-build-hist-hdr';
-        histHeader._devwatchSection = SECTION_TAG;
-        menu.addMenuItem(histHeader);
+        // Collapse history inside a sub-menu to reduce panel height
+        const histSub = new PopupMenu.PopupSubMenuMenuItem('', false);
+        histSub._devwatchSection = SECTION_TAG;
+        const histLabel = new St.Label({ text: _('Recent Builds'), style_class: 'dw-build-hist-hdr' });
+        histSub.label.get_parent().insert_child_above(histLabel, histSub.label);
+        histSub.label.hide();
 
         for (const run of shown) {
-            const item = _buildHistoryRow(run);
-            item._devwatchSection = SECTION_TAG;
-            menu.addMenuItem(item);
+            histSub.menu.addMenuItem(_buildHistoryRow(run));
         }
         if (histRuns.length > maxRows) {
             const more = new PopupMenu.PopupMenuItem(`  … and ${histRuns.length - maxRows} older`, { reactive: false });
             more.label.style_class = 'dw-dim';
-            more._devwatchSection = SECTION_TAG;
-            menu.addMenuItem(more);
+            histSub.menu.addMenuItem(more);
         }
+        menu.addMenuItem(histSub);
     } else if (active.length === 0) {
         const empty = new PopupMenu.PopupMenuItem(_('  No build activity yet'), { reactive: false });
         empty.label.style_class = 'dw-dim';

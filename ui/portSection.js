@@ -46,7 +46,11 @@ export function buildPortSection(menu, scanResult, onKill, showSystemPorts = fal
         ? ports.filter(p => !p.isDevPort).sort((a, b) => a.port - b.port)
         : [];
 
-    const ordered = [...devPorts, ...sysPorts].slice(0, MAX_PORTS_SHOWN);
+    // Deduplicate by port number (IPv4+IPv6 can produce duplicate entries)
+    const seenPorts = new Set();
+    const ordered = [...devPorts, ...sysPorts]
+        .filter(r => { if (seenPorts.has(r.port)) return false; seenPorts.add(r.port); return true; })
+        .slice(0, MAX_PORTS_SHOWN);
     for (const record of ordered) {
         const item = _buildRow(record, onKill);
         item._devwatchSection = SECTION_TAG;

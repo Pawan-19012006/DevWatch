@@ -29,7 +29,7 @@ export function buildCleanupSection(menu, cleanupResult, onKill) {
     const titleItem = new PopupMenu.PopupMenuItem('', { reactive: false });
     titleItem._devwatchSection = SECTION_TAG;
     const titleRow = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
-    titleRow.add_child(new St.Label({ text: _('Suggested Cleanup'), style_class: 'dw-section-label' }));
+    titleRow.add_child(new St.Label({ text: _('Cleanup'), style_class: 'dw-section-label' }));
 
     if (killable.length > 1) {
         const btn = new St.Button({

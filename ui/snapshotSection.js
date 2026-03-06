@@ -19,44 +19,42 @@ export function buildSnapshotSection(menu, snapshots, callbacks) {
     clearSnapshotSection(menu);
     const { onSave, onRestore, onDelete } = callbacks ?? {};
 
-    // Section header with Save button
-    const titleItem = new PopupMenu.PopupMenuItem('', { reactive: false });
-    titleItem._devwatchSection = SECTION_TAG;
-    const titleRow = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
-    titleRow.add_child(new St.Label({ text: _('Dev Sessions'), style_class: 'dw-section-label' }));
+    // Collapsible sub-menu: "Sessions  [Save]"
+    const sub = new PopupMenu.PopupSubMenuMenuItem('', false);
+    sub._devwatchSection = SECTION_TAG;
+
+    // Header row injected into the sub-menu trigger line
+    const headerRow = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
+    headerRow.add_child(new St.Label({ text: _('Sessions'), style_class: 'dw-section-label' }));
 
     const saveBtn = new St.Button({
-        label: _('Save Current'),
+        label: _('Save'),
         style_class: 'dw-section-action',
         reactive: true, can_focus: true, track_hover: true,
         y_align: Clutter.ActorAlign.CENTER,
     });
     saveBtn.connect('clicked', () => onSave?.());
-    titleRow.add_child(saveBtn);
+    headerRow.add_child(saveBtn);
 
-    titleItem.add_child(titleRow);
-    titleItem.label.hide();
-    menu.addMenuItem(titleItem);
+    sub.label.get_parent().insert_child_above(headerRow, sub.label);
+    sub.label.hide();
+    menu.addMenuItem(sub);
 
     if (!snapshots || snapshots.length === 0) {
-        const empty = new PopupMenu.PopupMenuItem(_('  No saved sessions yet — click Save Current'), { reactive: false });
+        const empty = new PopupMenu.PopupMenuItem(_('  No saved sessions yet — click Save'), { reactive: false });
         empty.label.style_class = 'dw-dim';
-        empty._devwatchSection = SECTION_TAG;
-        menu.addMenuItem(empty);
+        sub.menu.addMenuItem(empty);
         _addSep(menu);
         return;
     }
 
     for (const snap of snapshots.slice(0, MAX_ROWS)) {
-        const item = _buildRow(snap, onRestore, onDelete);
-        item._devwatchSection = SECTION_TAG;
-        menu.addMenuItem(item);
+        sub.menu.addMenuItem(_buildRow(snap, onRestore, onDelete));
     }
     if (snapshots.length > MAX_ROWS) {
         const more = new PopupMenu.PopupMenuItem(`  … and ${snapshots.length - MAX_ROWS} older sessions`, { reactive: false });
         more.label.style_class = 'dw-dim';
-        more._devwatchSection = SECTION_TAG;
-        menu.addMenuItem(more);
+        sub.menu.addMenuItem(more);
     }
     _addSep(menu);
 }

@@ -77,24 +77,24 @@ function _buildProjectRow(project, pidToPort) {
     const sub = new PopupMenu.PopupSubMenuMenuItem('', true);
     sub.label.text = '';
 
-    // ── Level 1 header ─────────────────────────────────────────────────────
-    const header = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER})
-    header.spacing = 4;
+    // ── Level 1 header (vertical: name on L1, stats on L2) ──────────────
+    const header = new St.BoxLayout({ vertical: true, x_expand: true });
+    header.spacing = 2;
 
-    // Health dot
-    const dot = new St.Label({
+    // Line 1: ● Project Name
+    const nameLine = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
+    nameLine.spacing = 4;
+    nameLine.add_child(new St.Label({
         text: '●',
         style_class: `dw-project-dot ${_projectDotClass(project)}`,
-    });
-    header.add_child(dot);
-
-    // Project name — cleaned of version numbers and package prefixes
-    header.add_child(new St.Label({
+    }));
+    nameLine.add_child(new St.Label({
         text: _cleanProjectName(project.name),
         style_class: 'dw-project-name',
     }));
+    header.add_child(nameLine);
 
-    // Summary: "4 processes · 151 MB"
+    // Line 2: 4 processes · 151 MB  (indented under the dot)
     const ram = _formatKb(project.totalMemKb);
     const count = project.processes.length;
     header.add_child(new St.Label({

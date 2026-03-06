@@ -274,6 +274,12 @@ export class SnapshotManager {
         for (const proj of projects) {
             if (!proj.root) continue;
 
+            // Skip virtual-envs, IDE extension dirs, package dirs, etc.
+            if (_isNonProjectRoot(proj.root)) {
+                console.log(`[DevWatch:SnapshotManager] restore(): skipping non-project root: ${proj.root}`);
+                continue;
+            }
+
             // Verify the directory still exists
             const dir = Gio.File.new_for_path(proj.root);
             if (!dir.query_exists(null)) {
@@ -281,13 +287,53 @@ export class SnapshotManager {
                 continue;
             }
 
-            // ── Reopen editors ─────────────────────────────────────────────
+            const services = proj.services ?? [];
+
+            // Separate services already bound to a port from ones we can start
+            const runnableServices = [];
+            for (const svc of services) {
+                if (svc.port && occupiedPorts.has(svc.port)) {
+                    console.log(
+                        `[DevWatch:SnapshotManager] restore(): port ${svc.port} already in use,` +
+                        ` skipping: ${svc.cmdline}`
+                    );
+                    skipped++;
+                } else {
+                    runnableServices.push(svc);
+                }
+            }
+
+            // ── Prefer VS Code integrated terminal ─────────────────────────
+            // If VS Code / Codium is the editor, write a temporary workspace
+            // file that runs each service as a task inside VS Code's integrated
+            // terminal (runOn: "folderOpen").  Falls back to gnome-terminal if
+            // anything goes wrong.
+            const vscodeEd = (proj.editors ?? []).find(
+                e => e.app === 'code' || e.app === 'codium'
+            );
+            if (vscodeEd && runnableServices.length > 0) {
+                const wsFile = this._writeVscodeWorkspace(proj, runnableServices);
+                if (wsFile) {
+                    try {
+                        const launcher = new Gio.SubprocessLauncher({ flags: Gio.SubprocessFlags.NONE });
+                        launcher.spawnv([vscodeEd.exec, wsFile]);
+                        console.log(`[DevWatch:SnapshotManager] Opened VS Code workspace: ${wsFile}`);
+                        launched += runnableServices.length;
+                        editors++;
+                        for (const svc of runnableServices)
+                            if (svc.port && svc.port >= 1024) this._openBrowserTab(svc.port);
+                        continue; // fully handled — skip fallback below
+                    } catch (e) {
+                        console.warn('[DevWatch:SnapshotManager] VS Code workspace launch failed:', e.message);
+                    }
+                }
+            }
+
+            // ── Fallback: open editor directly + spawn system terminals ─────
             for (const ed of (proj.editors ?? [])) {
                 this._launchEditor(ed, proj.root);
                 editors++;
             }
-
-            const services = proj.services ?? [];
 
             if (services.length === 0) {
                 // v1 snapshot or project with no captured commands — just open a shell
@@ -296,25 +342,11 @@ export class SnapshotManager {
                 continue;
             }
 
-            for (const svc of services) {
-                // Skip if port already occupied
-                if (svc.port && occupiedPorts.has(svc.port)) {
-                    console.log(
-                        `[DevWatch:SnapshotManager] restore(): port ${svc.port} already in use,` +
-                        ` skipping: ${svc.cmdline}`
-                    );
-                    skipped++;
-                    continue;
-                }
-
+            for (const svc of runnableServices) {
                 const cwd = svc.cwd ?? proj.root;
                 this._launchService(svc, cwd, proj.name);
                 launched++;
-
-                // Open a browser tab for dev HTTP/S ports
-                if (svc.port && svc.port >= 1024) {
-                    this._openBrowserTab(svc.port);
-                }
+                if (svc.port && svc.port >= 1024) this._openBrowserTab(svc.port);
             }
         }
 
@@ -376,6 +408,62 @@ export class SnapshotManager {
             console.log(`[DevWatch:SnapshotManager] Opened editor: ${ed.exec} ${projectRoot}`);
         } catch (e) {
             console.warn(`[DevWatch:SnapshotManager] _launchEditor(${ed.exec}) failed:`, e.message);
+        }
+    }
+
+    /**
+     * Write a temporary VS Code workspace file that launches each service as a
+     * task running inside VS Code's integrated terminal (runOn: "folderOpen").
+     *
+     * The file is stored in ~/.local/share/devwatch/workspaces/ so that VS Code
+     * remembers workspace-trust across reboots (unlike /tmp which is cleared).
+     *
+     * @param {{ root: string, name: string }} proj
+     * @param {Array<{ cmdline: string, cwd: string }>} services
+     * @returns {string|null}  Absolute path to the workspace file, or null on failure.
+     */
+    _writeVscodeWorkspace(proj, services) {
+        const tasks = services.map((svc, i) => ({
+            label:      `DevWatch[${i}]: ${svc.cmdline.slice(0, 50)}`,
+            type:       'shell',
+            command:    svc.cmdline,
+            options:    { cwd: svc.cwd ?? proj.root },
+            runOptions: { runOn: 'folderOpen' },
+            presentation: {
+                reveal: 'always',
+                panel:  'new',
+                title:  svc.cmdline.split(' ').slice(0, 3).join(' '),
+            },
+            problemMatcher: [],
+        }));
+
+        const wsData = {
+            folders: [{ path: proj.root }],
+            tasks:   { version: '2.0.0', tasks },
+        };
+
+        const wsDir = GLib.build_filenamev([
+            GLib.get_home_dir(), '.local', 'share', 'devwatch', 'workspaces',
+        ]);
+        try {
+            Gio.File.new_for_path(wsDir).make_directory_with_parents(null);
+        } catch (_) { /* already exists */ }
+
+        const safeName = proj.name.replace(/[^a-zA-Z0-9_-]/g, '_');
+        const wsPath   = GLib.build_filenamev([wsDir, `${safeName}.code-workspace`]);
+
+        try {
+            const file  = Gio.File.new_for_path(wsPath);
+            const bytes = new TextEncoder().encode(JSON.stringify(wsData, null, 2));
+            file.replace_contents(
+                bytes, null, false,
+                Gio.FileCreateFlags.REPLACE_DESTINATION, null
+            );
+            console.log(`[DevWatch:SnapshotManager] Wrote VS Code workspace: ${wsPath}`);
+            return wsPath;
+        } catch (e) {
+            console.warn('[DevWatch:SnapshotManager] _writeVscodeWorkspace failed:', e.message);
+            return null;
         }
     }
 
@@ -502,7 +590,8 @@ export class SnapshotManager {
         const now    = new Date();
         const isoNow = now.toISOString();
 
-        const roots = [...(projectMap?.keys() ?? [])];
+        // Exclude virtual-env and IDE-extension dirs — not real project workspaces.
+        const roots = [...(projectMap?.keys() ?? [])].filter(r => !_isNonProjectRoot(r));
         const branches = await Promise.all(roots.map(root => this._gitBranch(root)));
         const branchMap = new Map(roots.map((r, i) => [r, branches[i]]));
 
@@ -632,6 +721,34 @@ const EDITOR_MAP = new Map([
     ['vim',             { app: 'vim',     exec: 'vim'     }],
     ['emacs',           { app: 'emacs',   exec: 'emacs'   }],
 ]);
+
+/**
+ * Returns true if `root` looks like a virtual-environment, package-dependency,
+ * or IDE-extension data directory — not a real developer project workspace.
+ * Used to prevent DevWatch from snapshotting or restoring these directories.
+ *
+ * @param {string} root  Absolute directory path.
+ * @returns {boolean}
+ */
+function _isNonProjectRoot(root) {
+    const p    = root.replace(/\/+$/, '');   // strip trailing slash
+    const base = p.split('/').pop() ?? '';   // basename
+
+    // Python virtual environments (venv / .venv / virtualenv)
+    if (/^\.?venv$/.test(base) || base === 'virtualenv') return true;
+
+    // Node.js / Python package directories
+    if (base === 'node_modules' || base === 'site-packages' || base === '__pycache__') return true;
+
+    // VS Code / Pylance / IDE extension cache directories
+    // e.g. ~/.vscode/extensions/ms-python.vscode-pylance-2024.x.x
+    if (p.includes('/.vscode/extensions/'))  return true;
+    if (p.includes('/.vscode-server/'))      return true;
+    if (/\/ms-python\.|^\/ms-[a-z]/.test(p)) return true;
+    if (/\/\.MS-Python/.test(p))             return true;
+
+    return false;
+}
 
 /**
  * Detect which editors had the project open at snapshot time by inspecting

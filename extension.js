@@ -92,6 +92,8 @@ export default class DevWatchExtension extends Extension {
         this._lastPortResult  = null;
         /** Most recent snapshot list for the UI. */
         this._snapshots       = [];
+        /** Last auto-saved workspace (null until first poll completes). */
+        this._lastWorkspace   = null;
 
         this._projectDetector.onProjectChanged(_info => {
             // React immediately when the focused project changes
@@ -220,6 +222,7 @@ export default class DevWatchExtension extends Extension {
         this._lastProjectMap  = null;
         this._lastPortResult  = null;
         this._snapshots       = null;
+        this._lastWorkspace   = null;
 
         this._buildDetector?.destroy();
         this._buildDetector = null;

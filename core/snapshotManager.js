@@ -304,17 +304,28 @@ export class SnapshotManager {
             }
 
             // ── Prefer VS Code integrated terminal ─────────────────────────
-            // Check $PATH at restore time — snapshot may not have captured the
-            // VS Code process if it was open under a different PID tree.
-            // Write DevWatch service commands to .vscode/tasks.json so they run
-            // inside VS Code's integrated terminal (runOn: "folderOpen").
-            // Trust is at the folder level, so the dialog only appears once.
-            const vscodeExec =
-                GLib.find_program_in_path('code') ??
-                GLib.find_program_in_path('code-oss') ??
-                GLib.find_program_in_path('codium') ??
-                (proj.editors ?? []).find(e => e.app === 'code' || e.app === 'codium')?.exec ??
-                null;
+            // Only use VS Code if the project was actually using it at snapshot
+            // time (editors[]) OR the project already has a .vscode/ directory
+            // (reliable indicator the developer works in VS Code for this repo).
+            // This prevents opening VS Code for Vim / PyCharm / no-editor projects
+            // merely because `code` happens to be installed on the machine.
+            const wasVscodeEditor = (proj.editors ?? []).some(
+                e => e.app === 'code' || e.app === 'codium'
+            );
+            const projectHasVscode = Gio.File.new_for_path(
+                GLib.build_filenamev([proj.root, '.vscode'])
+            ).query_exists(null);
+
+            // Resolve the executable at restore time — the snapshot path may be
+            // stale after a VS Code upgrade.  Always prefer PATH; only fall back
+            // to the absolute path recorded in the snapshot if PATH lookup fails.
+            const vscodeExec = (wasVscodeEditor || projectHasVscode)
+                ? (GLib.find_program_in_path('code') ??
+                   GLib.find_program_in_path('code-oss') ??
+                   GLib.find_program_in_path('codium') ??
+                   (proj.editors ?? []).find(e => e.app === 'code' || e.app === 'codium')?.exec ??
+                   null)
+                : null;
 
             if (vscodeExec) {
                 if (runnableServices.length > 0)
@@ -469,11 +480,14 @@ export class SnapshotManager {
         existing.tasks.push(...newTasks);
 
         try {
-            const file    = Gio.File.new_for_path(tasksPath);
-            const ostream = file.replace(null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null);
-            const bytes   = new TextEncoder().encode(JSON.stringify(existing, null, 2));
-            ostream.write_bytes(new GLib.Bytes(bytes), null);
-            ostream.close(null);
+            const file  = Gio.File.new_for_path(tasksPath);
+            const bytes = new TextEncoder().encode(JSON.stringify(existing, null, 2));
+            // replace_contents() is atomic (write-then-rename) and always writes
+            // all bytes — safer than managing a raw output stream.
+            file.replace_contents(
+                bytes, null, false,
+                Gio.FileCreateFlags.REPLACE_DESTINATION, null
+            );
             console.log(`[DevWatch:SnapshotManager] Wrote VS Code tasks: ${tasksPath}`);
         } catch (e) {
             console.warn('[DevWatch:SnapshotManager] _writeVscodeTasks failed:', e.message);
@@ -759,7 +773,7 @@ function _isNonProjectRoot(root) {
     // e.g. ~/.vscode/extensions/ms-python.vscode-pylance-2024.x.x
     if (p.includes('/.vscode/extensions/'))  return true;
     if (p.includes('/.vscode-server/'))      return true;
-    if (/\/ms-python\.|^\/ms-[a-z]/.test(p)) return true;
+    if (/\/ms-python\.|\/ms-[a-z]/.test(p)) return true;  // ms-python.*, ms-toolsai.*, etc.
     if (/\/\.MS-Python/.test(p))             return true;
 
     return false;
@@ -863,6 +877,16 @@ function _normaliseArgv(cmdline) {
     if (SHELL_BINS.has(bin) && argv.length === 1) return null;
     // Shell launched with -c "..." or similar — keep it, it runs a real command
     if (SHELL_BINS.has(bin) && argv.length > 1) return argv;
+
+    // Filter VS Code / Electron internal worker sub-processes.
+    // These processes are spawned internally by the IDE (renderer, extensionHost,
+    // GPU, utility, watchman…) and must never be saved or restored as dev services.
+    // They are identified by the --type= flag that Electron attaches to all workers.
+    const VSCODE_BINS = new Set(['code', 'code-oss', 'codium', 'electron']);
+    if (VSCODE_BINS.has(bin) &&
+        argv.some(a => /^--type=/.test(a) || a === '--ms-enable-electron-run-as-node')) {
+        return null;
+    }
 
     return argv;
 }

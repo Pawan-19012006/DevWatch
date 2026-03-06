@@ -388,7 +388,18 @@ export default class DevWatchExtension extends Extension {
         if (!this._snapshotManager) return;
         this._snapshotManager
             .load(filename)
-            .then(data => data ? this._snapshotManager.restore(data) : null)
+            .then(data => {
+                if (!data) return;
+                return this._snapshotManager.restore(data);
+            })
+            .then(result => {
+                if (!result) return;
+                const { launched, skipped } = result;
+                const parts = [];
+                if (launched > 0) parts.push(`${launched} service${launched !== 1 ? 's' : ''} launched`);
+                if (skipped  > 0) parts.push(`${skipped} already running`);
+                Main.notify('DevWatch — Session Restored', parts.join(', ') || 'No services to start');
+            })
             .catch(e => this._logError(e));
     }
 

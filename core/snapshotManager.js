@@ -261,17 +261,29 @@ export class SnapshotManager {
     }
 
     /**
-     * Restore a snapshot by opening a gnome-terminal (or xterm) at each
-     * project root with the saved branch info displayed in the title.
+     * Restore a snapshot by relaunching each saved service command in its own
+     * terminal window.  For v1 snapshots (no services array), falls back to
+     * opening a terminal at the project root.
+     *
+     * Port-conflict detection: if a service's port is already listening,
+     * that service is skipped to avoid duplicate processes.
+     *
      * @param {object} snapshot  Full snapshot data from load().
-     * @returns {Promise<void>}
+     * @returns {{ launched: number, skipped: number }}
      */
     async restore(snapshot) {
         const projects = snapshot?.projects ?? [];
         if (projects.length === 0) {
             console.log('[DevWatch:SnapshotManager] restore(): snapshot has no projects');
-            return;
+            return { launched: 0, skipped: 0 };
         }
+
+        // Snapshot of currently listening ports — lets us skip services that
+        // are already running so we never create duplicate processes.
+        const occupiedPorts = this._readOccupiedPorts();
+
+        let launched = 0;
+        let skipped  = 0;
 
         for (const proj of projects) {
             if (!proj.root) continue;
@@ -283,24 +295,122 @@ export class SnapshotManager {
                 continue;
             }
 
-            const branchNote = proj.branch ? `(${proj.branch})` : '';
-            const title = `${proj.name} ${branchNote}`.trim();
+            const services = proj.services ?? [];
 
-            // Try gnome-terminal first, then xterm
-            for (const argv of [
-                ['gnome-terminal', `--title=${title}`, `--working-directory=${proj.root}`],
-                ['xterm', '-title', title, '-e', `cd "${proj.root}" && exec $SHELL`],
-            ]) {
-                try {
-                    const launcher = new Gio.SubprocessLauncher({
-                        flags: Gio.SubprocessFlags.NONE,
-                    });
-                    launcher.spawnv(argv);
-                    console.log(`[DevWatch:SnapshotManager] Restored terminal: ${title}`);
-                    break;
-                } catch (_) { /* try next */ }
+            if (services.length === 0) {
+                // v1 snapshot or project with no captured commands — just open a shell
+                this._openTerminal(proj.root, proj.name, proj.branch);
+                launched++;
+                continue;
+            }
+
+            for (const svc of services) {
+                // Skip if port already occupied
+                if (svc.port && occupiedPorts.has(svc.port)) {
+                    console.log(
+                        `[DevWatch:SnapshotManager] restore(): port ${svc.port} already in use,` +
+                        ` skipping: ${svc.cmdline}`
+                    );
+                    skipped++;
+                    continue;
+                }
+
+                const cwd = svc.cwd ?? proj.root;
+                this._launchService(svc, cwd, proj.name);
+                launched++;
             }
         }
+
+        console.log(
+            `[DevWatch:SnapshotManager] restore(): launched=${launched} skipped=${skipped}`
+        );
+        return { launched, skipped };
+    }
+
+    // ── Terminal helpers ─────────────────────────────────────────────────────
+
+    /**
+     * Open a new terminal running a saved service command.
+     * The window title shows the project name and command for easy identification.
+     * A "press Enter to close" prompt is appended so the terminal stays open
+     * if the command exits immediately (e.g. misconfigured command).
+     *
+     * @param {{ cmdline: string, argv: string[] }} svc
+     * @param {string} cwd   Working directory for the command
+     * @param {string} projectName
+     */
+    _launchService(svc, cwd, projectName) {
+        const title   = `${projectName} — ${svc.cmdline}`;
+        // Wrap in bash -c so multi-word commands (npm run dev, python manage.py …)
+        // are tokenised by the shell rather than exec'd literally.
+        const shellCmd =
+            `${svc.cmdline}; ` +
+            `printf '\\n[DevWatch] Process exited (code $?). Press Enter to close.'; read`;
+
+        for (const argv of [
+            ['gnome-terminal', `--title=${title}`, `--working-directory=${cwd}`,
+             '--', 'bash', '-c', shellCmd],
+            ['xterm', '-title', title, '-e',
+             `bash -c "cd '${cwd.replace(/'/g, "'\\''")}' && ${shellCmd}"`],
+        ]) {
+            try {
+                const launcher = new Gio.SubprocessLauncher({ flags: Gio.SubprocessFlags.NONE });
+                launcher.set_cwd(cwd);
+                launcher.spawnv(argv);
+                console.log(`[DevWatch:SnapshotManager] Launched service: ${svc.cmdline} (${cwd})`);
+                return;
+            } catch (e) {
+                console.warn(
+                    `[DevWatch:SnapshotManager] _launchService via ${argv[0]} failed:`, e.message
+                );
+            }
+        }
+    }
+
+    /**
+     * Open a bare terminal at a project root (used for v1 snapshots).
+     * @param {string} root
+     * @param {string} name
+     * @param {string|null} branch
+     */
+    _openTerminal(root, name, branch) {
+        const title = branch ? `${name} (${branch})` : name;
+        for (const argv of [
+            ['gnome-terminal', `--title=${title}`, `--working-directory=${root}`],
+            ['xterm', '-title', title, '-e',
+             `bash -c "cd '${root.replace(/'/g, "'\\''")}' && exec $SHELL"`],
+        ]) {
+            try {
+                const launcher = new Gio.SubprocessLauncher({ flags: Gio.SubprocessFlags.NONE });
+                launcher.spawnv(argv);
+                console.log(`[DevWatch:SnapshotManager] Opened terminal: ${title}`);
+                return;
+            } catch (_) { /* try next */ }
+        }
+    }
+
+    /**
+     * Read /proc/net/tcp and /proc/net/tcp6 to find all currently LISTEN ports.
+     * This is a synchronous, zero-subprocess check — safe to call before spawning.
+     * @returns {Set<number>}
+     */
+    _readOccupiedPorts() {
+        const occupied = new Set();
+        for (const procFile of ['/proc/net/tcp', '/proc/net/tcp6']) {
+            try {
+                const [, raw] = Gio.File.new_for_path(procFile).load_contents(null);
+                const text = new TextDecoder().decode(raw);
+                for (const line of text.split('\n').slice(1)) {
+                    const cols = line.trim().split(/\s+/);
+                    if (cols.length < 4) continue;
+                    // col[3] is state: 0A = TCP_LISTEN
+                    if (cols[3] !== '0A') continue;
+                    const portHex = cols[1].split(':')[1];
+                    if (portHex) occupied.add(parseInt(portHex, 16));
+                }
+            } catch (_) { /* file may not exist on all kernels */ }
+        }
+        return occupied;
     }
 
     /**

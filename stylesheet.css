@@ -353,6 +353,25 @@
     width: 80px;
 }
 
+/* Inline session name entry — shown when Save is clicked                   */
+.dw-snap-entry {
+    font-size: 12px;
+    color: #eeeeee;
+    background-color: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 6px;
+    padding: 4px 8px;
+    caret-color: #78aeed;
+}
+.dw-snap-entry:focus {
+    border-color: rgba(120,174,237,0.50);
+    background-color: rgba(255,255,255,0.09);
+}
+.dw-snap-naming-row {
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
 /* ── Build section ─────────────────────────────────────────────────────────── */
 .dw-build-active-icon { color: #f8e45c; font-size: 14px; width: 20px; y-align: center; }
 .dw-build-status      { font-size: 13px; font-weight: bold; color: #f8e45c; y-align: center; }

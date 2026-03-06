@@ -337,7 +337,7 @@ export default class DevWatchExtension extends Extension {
             this._indicator.menu,
             this._snapshots ?? [],
             {
-                onSave:    ()   => this._saveSnapshot(),
+                onSave:    (label) => this._saveSnapshot(label),
                 onRestore: fn  => this._restoreSnapshot(fn),
                 onDelete:  fn  => this._deleteSnapshot(fn),
             }
@@ -371,11 +371,12 @@ export default class DevWatchExtension extends Extension {
 
     /**
      * Save current session as a snapshot and refresh the snapshot list.
+     * @param {string} [label='auto']
      */
-    _saveSnapshot() {
+    _saveSnapshot(label = 'auto') {
         if (!this._snapshotManager) return;
         this._snapshotManager
-            .save(this._lastProjectMap ?? new Map(), this._lastPortResult ?? { ports: [], newPorts: [] })
+            .save(this._lastProjectMap ?? new Map(), this._lastPortResult ?? { ports: [], newPorts: [] }, label)
             .then(() => this._refresh())
             .catch(e => this._logError(e));
     }

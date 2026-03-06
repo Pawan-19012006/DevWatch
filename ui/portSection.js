@@ -77,11 +77,11 @@ export function clearPortSection(menu) {
 function _buildRow(record, onKill) {
     const item = new PopupMenu.PopupMenuItem('', { reactive: false });
 
-    // Vertical outer: line 1 = project/name + runtime; line 2 = detail + stop (optional)
+    // Vertical outer: line 1 = project/name + Stop; line 2 = detail + runtime
     const outer = new St.BoxLayout({ vertical: true, x_expand: true });
     outer.spacing = 2;
 
-    // ── Line 1: ● project-name  (runtime right-aligned) ──────────────────
+    // ── Line 1: ● project-name  [Stop right-aligned] ─────────────────────
     const line1 = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
     line1.spacing = 6;
     line1.add_child(new St.Label({
@@ -89,45 +89,43 @@ function _buildRow(record, onKill) {
         style_class: record.isDevPort ? 'dw-port-dot dw-port-dot-active' : 'dw-port-dot dw-port-dot-dim',
     }));
     const projectLabel = record.projectRoot
-        ? _truncate(GLib.path_get_basename(record.projectRoot), 22)
+        ? _truncate(GLib.path_get_basename(record.projectRoot), 37)
         : (record.processName ? _toServiceLabel(record.processName) : `Port ${record.port}`);
     line1.add_child(new St.Label({
         text: projectLabel,
         style_class: record.isDevPort ? 'dw-port-project' : 'dw-port-number-dim',
         x_expand: true,
     }));
-    const runtime = _formatRuntime(record.runtimeMs);
-    if (runtime) {
-        line1.add_child(new St.Label({ text: runtime, style_class: 'dw-service-uptime' }));
+    const hasStop = Boolean(record.pid && typeof onKill === 'function');
+    if (hasStop) {
+        const stopBtn = new St.Button({
+            label: 'Stop',
+            style_class: 'dw-btn-stop',
+            reactive: true, can_focus: true, track_hover: true,
+        });
+        stopBtn.connect('clicked', () => onKill(record.pid, record.port));
+        line1.add_child(stopBtn);
     }
     outer.add_child(line1);
 
-    // ── Line 2: Port X · Process  [Stop]  (only rendered when meaningful) ─
+    // ── Line 2: Port X · Process · runtime  (only when meaningful) ────────
     const detail = _buildDetail(record);
-    const hasStop = Boolean(record.pid && typeof onKill === 'function');
-    if (detail || hasStop) {
+    const runtime = _formatRuntime(record.runtimeMs);
+    const detailParts = [detail, runtime].filter(Boolean);
+    if (detailParts.length > 0) {
         const line2 = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
-        line2.spacing = 8;
         line2.add_child(new St.Label({
-            text: detail ?? '',
+            text: detailParts.join('  ·  '),
             style_class: 'dw-port-detail',
             x_expand: true,
             y_align: Clutter.ActorAlign.CENTER,
         }));
-        if (hasStop) {
-            const stopBtn = new St.Button({
-                label: 'Stop',
-                style_class: 'dw-btn-stop',
-                reactive: true, can_focus: true, track_hover: true,
-            });
-            stopBtn.connect('clicked', () => onKill(record.pid, record.port));
-            line2.add_child(stopBtn);
-        }
         outer.add_child(line2);
     }
 
     item.add_child(outer);
     item.label.hide();
+    item.add_style_class_name('dw-port-row');
     return item;
 }
 

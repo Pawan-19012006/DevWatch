@@ -36,16 +36,21 @@
 
 /* Compact padding for service rows nested inside an expanded project      */
 .devwatch-menu .popup-sub-menu .popup-menu-item {
-    padding-top: 2px;
-    padding-bottom: 2px;
+    padding-top: 1px;
+    padding-bottom: 1px;
     min-height: 0;
 }
 
 /* Actions row: top margin provides separation without a hard divider line  */
 .devwatch-menu .popup-sub-menu .dw-project-actions {
-    padding-top: 6px;
-    margin-top: 2px;
+    padding-top: 4px;
+    margin-top: 1px;
     border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+/* Extra bottom breathing room when the empty-state label sits above divider */
+.devwatch-menu .popup-sub-menu .dw-empty-services {
+    padding-bottom: 6px;
 }
 
 /* ── Panel bar ─────────────────────────────────────────────────────────────── */
@@ -222,12 +227,20 @@
 }
 
 /* ── Port section ──────────────────────────────────────────────────────────── */
+
+/* Compact rows + subtle hairline separator between entries                 */
+.devwatch-menu .dw-port-row {
+    padding-top: 4px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
 .dw-port-project {
     font-size: 13px;
     font-weight: 600;
     color: #dddddd;
     y-align: center;
-    min-height: 24px;
+    min-height: 20px;
 }
 .dw-port-number {
     font-size: 13px;

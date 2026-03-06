@@ -76,9 +76,10 @@ export function clearProjectSection(menu) {
 function _buildProjectRow(project, pidToPort) {
     const sub = new PopupMenu.PopupSubMenuMenuItem('', true);
     sub.label.text = '';
-    // Override theme grey card with transparent background (inline style wins over CSS cascade)
+    // Transparent bg + indent + subtle left rail to group service rows under this project
     sub.menu.actor.set_style(
-        'background-color: transparent; border-radius: 0; padding-left: 16px;'
+        'background-color: transparent; border-radius: 0; padding-left: 14px;' +
+        'border-left: 2px solid rgba(255,255,255,0.08);'
     );
 
     // ── Level 1 header (vertical: name on L1, stats on L2) ──────────────

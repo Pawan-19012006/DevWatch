@@ -24,13 +24,21 @@
 
 /* Subtle background on expanded project header (replaces harsh grey)      */
 .devwatch-menu .popup-sub-menu-item:open {
-    background-color: rgba(255,255,255,0.03);
+    background-color: rgba(255,255,255,0.04);
+    border-radius: 6px;
 }
 
 /* Consistent row padding for all items inside our menu */
 .devwatch-menu .popup-menu-item {
     padding-top: 5px;
     padding-bottom: 5px;
+}
+
+/* Compact padding for service rows nested inside an expanded project      */
+.devwatch-menu .popup-sub-menu .popup-menu-item {
+    padding-top: 2px;
+    padding-bottom: 2px;
+    min-height: 0;
 }
 
 /* ── Panel bar ─────────────────────────────────────────────────────────────── */

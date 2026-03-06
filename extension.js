@@ -394,9 +394,10 @@ export default class DevWatchExtension extends Extension {
             })
             .then(result => {
                 if (!result) return;
-                const { launched, skipped } = result;
+                const { launched, skipped, editors } = result;
                 const parts = [];
                 if (launched > 0) parts.push(`${launched} service${launched !== 1 ? 's' : ''} launched`);
+                if (editors  > 0) parts.push(`${editors} editor${editors  !== 1 ? 's' : ''} opened`);
                 if (skipped  > 0) parts.push(`${skipped} already running`);
                 Main.notify('DevWatch — Session Restored', parts.join(', ') || 'No services to start');
             })

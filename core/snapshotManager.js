@@ -41,6 +41,11 @@
  *     port     : number | null, // port the service is bound to (null if unbound / unknown)
  *   }
  *
+ *   EditorSnap {
+ *     app  : string,  // canonical short name: "code", "codium", "idea", "zed", "vim", etc.
+ *     exec : string,  // full executable path found in $PATH (for reliable re-launch)
+ *   }
+ *
  *   PortSnap {
  *     port        : number,
  *     protocol    : string,
@@ -149,6 +154,9 @@ export class SnapshotManager {
                 });
             }
 
+            // Build EditorSnap array — which IDEs had this project open?
+            const editors = _detectEditors(pd?.processes ?? []);
+
             return {
                 root,
                 name:         pd?.name ?? GLib.path_get_basename(root),
@@ -156,6 +164,7 @@ export class SnapshotManager {
                 processNames: names,
                 totalMemKb:   pd?.totalMemKb ?? 0,
                 services,
+                editors,
             };
         });
 
@@ -228,12 +237,15 @@ export class SnapshotManager {
                 const path = GLib.build_filenamev([this._snapshotDir, meta.filename]);
                 const [, raw] = Gio.File.new_for_path(path).load_contents(null);
                 const data = JSON.parse(new TextDecoder().decode(raw));
-                meta.projectCount  = data.projects?.length ?? 0;
-                meta.serviceCount  = (data.projects ?? [])
+                meta.projectCount = data.projects?.length ?? 0;
+                meta.serviceCount = (data.projects ?? [])
                     .reduce((n, p) => n + (p.services?.length ?? 0), 0);
+                meta.editorCount  = (data.projects ?? [])
+                    .reduce((n, p) => n + (p.editors?.length  ?? 0), 0);
             } catch (_) {
                 meta.projectCount = meta.projectCount ?? 0;
                 meta.serviceCount = 0;
+                meta.editorCount  = 0;
             }
         }
 
@@ -284,6 +296,7 @@ export class SnapshotManager {
 
         let launched = 0;
         let skipped  = 0;
+        let editors  = 0;
 
         for (const proj of projects) {
             if (!proj.root) continue;
@@ -293,6 +306,12 @@ export class SnapshotManager {
             if (!dir.query_exists(null)) {
                 console.warn(`[DevWatch:SnapshotManager] restore(): root gone: ${proj.root}`);
                 continue;
+            }
+
+            // ── Reopen editors ─────────────────────────────────────────────
+            for (const ed of (proj.editors ?? [])) {
+                this._launchEditor(ed, proj.root);
+                editors++;
             }
 
             const services = proj.services ?? [];
@@ -318,13 +337,18 @@ export class SnapshotManager {
                 const cwd = svc.cwd ?? proj.root;
                 this._launchService(svc, cwd, proj.name);
                 launched++;
+
+                // Open a browser tab for dev HTTP/S ports
+                if (svc.port && svc.port >= 1024) {
+                    this._openBrowserTab(svc.port);
+                }
             }
         }
 
         console.log(
-            `[DevWatch:SnapshotManager] restore(): launched=${launched} skipped=${skipped}`
+            `[DevWatch:SnapshotManager] restore(): launched=${launched} skipped=${skipped} editors=${editors}`
         );
-        return { launched, skipped };
+        return { launched, skipped, editors };
     }
 
     // ── Terminal helpers ─────────────────────────────────────────────────────
@@ -365,6 +389,40 @@ export class SnapshotManager {
                 );
             }
         }
+    }
+
+    /**
+     * Open the saved editor with the project root as its workspace argument.
+     * @param {{ app: string, exec: string }} ed
+     * @param {string} projectRoot
+     */
+    _launchEditor(ed, projectRoot) {
+        try {
+            const launcher = new Gio.SubprocessLauncher({ flags: Gio.SubprocessFlags.NONE });
+            launcher.spawnv([ed.exec, projectRoot]);
+            console.log(`[DevWatch:SnapshotManager] Opened editor: ${ed.exec} ${projectRoot}`);
+        } catch (e) {
+            console.warn(`[DevWatch:SnapshotManager] _launchEditor(${ed.exec}) failed:`, e.message);
+        }
+    }
+
+    /**
+     * Open a browser tab for a localhost dev port using xdg-open.
+     * Only called for ports >= 1024 (dev range).
+     * A short delay is added so the service has time to bind before the browser hits it.
+     * @param {number} port
+     */
+    _openBrowserTab(port) {
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 2500, () => {
+            try {
+                const launcher = new Gio.SubprocessLauncher({ flags: Gio.SubprocessFlags.NONE });
+                launcher.spawnv(['xdg-open', `http://localhost:${port}`]);
+                console.log(`[DevWatch:SnapshotManager] Opened browser tab: http://localhost:${port}`);
+            } catch (e) {
+                console.warn('[DevWatch:SnapshotManager] _openBrowserTab failed:', e.message);
+            }
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     /**
@@ -500,6 +558,74 @@ export class SnapshotManager {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
+
+/**
+ * Known IDE / editor executables.
+ * Maps the process binary name (as seen in /proc/<pid>/cmdline[0] basename)
+ * to a canonical short app name and the preferred launch command.
+ *
+ * The launch command is the binary we re-exec on restore — usually the same
+ * as the process name but sometimes a wrapper script has a different name.
+ */
+const EDITOR_MAP = new Map([
+    // VS Code family
+    ['code',            { app: 'code',    exec: 'code'    }],
+    ['code-oss',        { app: 'code',    exec: 'code-oss'}],
+    ['codium',          { app: 'codium',  exec: 'codium'  }],
+    // JetBrains family
+    ['idea',            { app: 'idea',    exec: 'idea'    }],
+    ['idea.sh',         { app: 'idea',    exec: 'idea'    }],
+    ['pycharm',         { app: 'pycharm', exec: 'pycharm' }],
+    ['pycharm.sh',      { app: 'pycharm', exec: 'pycharm' }],
+    ['webstorm',        { app: 'webstorm',exec: 'webstorm'}],
+    ['clion',           { app: 'clion',   exec: 'clion'   }],
+    ['goland',          { app: 'goland',  exec: 'goland'  }],
+    ['rider',           { app: 'rider',   exec: 'rider'   }],
+    // Other editors
+    ['zed',             { app: 'zed',     exec: 'zed'     }],
+    ['zeditor',         { app: 'zed',     exec: 'zed'     }],
+    ['sublime_text',    { app: 'sublime', exec: 'subl'    }],
+    ['subl',            { app: 'sublime', exec: 'subl'    }],
+    ['atom',            { app: 'atom',    exec: 'atom'    }],
+    ['gedit',           { app: 'gedit',   exec: 'gedit'   }],
+    ['kate',            { app: 'kate',    exec: 'kate'    }],
+    ['nvim',            { app: 'nvim',    exec: 'nvim'    }],
+    ['vim',             { app: 'vim',     exec: 'vim'     }],
+    ['emacs',           { app: 'emacs',   exec: 'emacs'   }],
+]);
+
+/**
+ * Detect which editors had the project open at snapshot time by inspecting
+ * the live process list for that project.
+ *
+ * Returns an array of unique EditorSnap objects.
+ * Only includes editors whose executable can be resolved in $PATH so that
+ * restore won't try to launch something that doesn't exist.
+ *
+ * @param {Array<{ name: string, cmdline: string[] }>} processes
+ * @returns {Array<{ app: string, exec: string }>}
+ */
+function _detectEditors(processes) {
+    const seen   = new Set();
+    const result = [];
+
+    for (const proc of processes) {
+        if (!proc.cmdline || proc.cmdline.length === 0) continue;
+
+        const bin = proc.cmdline[0].replace(/.*\//, ''); // basename
+        const ed  = EDITOR_MAP.get(bin);
+        if (!ed || seen.has(ed.app)) continue;
+
+        // Verify the executable is actually available before recording it
+        const resolvedExec = GLib.find_program_in_path(ed.exec);
+        if (!resolvedExec) continue;
+
+        seen.add(ed.app);
+        result.push({ app: ed.app, exec: resolvedExec });
+    }
+
+    return result;
+}
 
 /**
  * Format a Date as "YYYY-MM-DD_HH-MM-SS" for use in filenames.

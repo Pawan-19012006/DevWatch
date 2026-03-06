@@ -1,10 +1,10 @@
 /**
- * DevWatch — ui/snapshotSection.js  (v2)
+ * DevWatch — ui/snapshotSection.js  (v3)
  *
  * Section: "Dev Sessions"
  *
  * Save, restore, and delete workspace snapshots.
- *   before-refactor   03 Mar 14:30   3 apps   [Restore] [Delete]
+ * Phase 4: inline naming entry, Resuming… feedback, Autosave label alias.
  */
 
 import St from 'gi://St';
@@ -15,7 +15,7 @@ import { _ } from '../utils/i18n.js';
 const SECTION_TAG = 'devwatch-snapshots';
 const MAX_ROWS = 5;
 
-export function buildSnapshotSection(menu, snapshots, callbacks) {
+export function buildSnapshotSection(menu, snapshots, callbacks, lastWorkspace = null) {
     clearSnapshotSection(menu);
     const { onSave, onRestore, onDelete } = callbacks ?? {};
 
@@ -23,9 +23,9 @@ export function buildSnapshotSection(menu, snapshots, callbacks) {
     const sub = new PopupMenu.PopupSubMenuMenuItem('', false);
     sub._devwatchSection = SECTION_TAG;
 
-    // Header row injected into the sub-menu trigger line
+    // ── Header row: "Sessions"  [Save] ─────────────────────────────────────
     const headerRow = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
-    headerRow.add_child(new St.Label({ text: _('Sessions'), style_class: 'dw-section-label' }));
+    headerRow.add_child(new St.Label({ text: _('Sessions'), style_class: 'dw-section-label', x_expand: true }));
 
     const saveBtn = new St.Button({
         label: _('Save'),
@@ -33,12 +33,79 @@ export function buildSnapshotSection(menu, snapshots, callbacks) {
         reactive: true, can_focus: true, track_hover: true,
         y_align: Clutter.ActorAlign.CENTER,
     });
-    saveBtn.connect('clicked', () => onSave?.());
     headerRow.add_child(saveBtn);
 
     sub.label.get_parent().insert_child_above(headerRow, sub.label);
     sub.label.hide();
+
+    // ── Inline naming row (hidden until Save is clicked) ──────────────────
+    const namingItem = new PopupMenu.PopupMenuItem('', { reactive: false });
+    namingItem.add_style_class_name('dw-snap-naming-row');
+    const namingBox = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
+    namingBox.spacing = 6;
+
+    const entry = new St.Entry({
+        hint_text: _('Session name…'),
+        style_class: 'dw-snap-entry',
+        x_expand: true,
+        can_focus: true,
+    });
+    entry.clutter_text.set_max_length(40);
+
+    const confirmBtn = new St.Button({
+        label: '✓',
+        style_class: 'dw-section-action',
+        reactive: true, can_focus: true, track_hover: true,
+    });
+    const cancelBtn = new St.Button({
+        label: '✕',
+        style_class: 'dw-btn-delete',
+        reactive: true, can_focus: true, track_hover: true,
+    });
+
+    namingBox.add_child(entry);
+    namingBox.add_child(confirmBtn);
+    namingBox.add_child(cancelBtn);
+    namingItem.add_child(namingBox);
+    namingItem.label.hide();
+    namingItem._devwatchSection = SECTION_TAG;
+
+    const _showNaming = () => {
+        saveBtn.reactive = false;
+        saveBtn.opacity  = 80;
+        entry.set_text('');
+        namingItem.visible = true;
+        // Focus the text entry after layout settles
+        entry.grab_key_focus();
+    };
+    const _hideNaming = () => {
+        namingItem.visible = false;
+        saveBtn.reactive = true;
+        saveBtn.opacity  = 255;
+    };
+
+    saveBtn.connect('clicked', _showNaming);
+    cancelBtn.connect('clicked', _hideNaming);
+    confirmBtn.connect('clicked', () => {
+        const label = entry.get_text().trim() || 'auto';
+        _hideNaming();
+        onSave?.(label);
+    });
+    // Also confirm on Enter key
+    entry.clutter_text.connect('activate', () => {
+        const label = entry.get_text().trim() || 'auto';
+        _hideNaming();
+        onSave?.(label);
+    });
+
     menu.addMenuItem(sub);
+    sub.menu.addMenuItem(namingItem, 0); // insert at top of sub-menu
+    namingItem.visible = false;
+
+    // ── Sticky "Last Workspace" entry (auto-saved on every poll + shutdown) ─────
+    if (lastWorkspace) {
+        sub.menu.addMenuItem(_buildLastWorkspaceRow(lastWorkspace, onRestore));
+    }
 
     if (!snapshots || snapshots.length === 0) {
         const empty = new PopupMenu.PopupMenuItem(_('  No saved sessions yet — click Save'), { reactive: false });
@@ -66,30 +133,103 @@ export function clearSnapshotSection(menu) {
 
 function _buildRow(snap, onRestore, onDelete) {
     const item = new PopupMenu.PopupMenuItem('', { reactive: false });
-    const row  = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER})
-    row.spacing = 8;
+    const outer = new St.BoxLayout({ vertical: true, x_expand: true });
+    outer.spacing = 2;
 
-    row.add_child(new St.Label({ text: _truncate(snap.label ?? 'auto', 22), style_class: 'dw-snap-name' }));
-    row.add_child(new St.Label({ text: _formatDate(snap.savedAt), style_class: 'dw-snap-meta' }));
+    // Line 1: name  ·  date
+    const line1 = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
+    line1.spacing = 8;
+    const displayLabel = (snap.label === 'auto' || !snap.label) ? 'Autosave' : snap.label;
+    line1.add_child(new St.Label({ text: _truncate(displayLabel, 28), style_class: 'dw-snap-name', x_expand: true }));
+    line1.add_child(new St.Label({ text: _formatDate(snap.savedAt), style_class: 'dw-snap-meta' }));
+    outer.add_child(line1);
 
-    if (snap.projectCount != null) {
-        row.add_child(new St.Label({
-            text: `${snap.projectCount} app${snap.projectCount !== 1 ? 's' : ''}`,
+    // Line 2: meta summary  [Resume]  [Delete]
+    const line2 = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
+    line2.spacing = 6;
+
+    const parts = [];
+    if (snap.projectCount != null) parts.push(`${snap.projectCount} project${snap.projectCount !== 1 ? 's' : ''}`);
+    if (snap.serviceCount)         parts.push(`${snap.serviceCount} service${snap.serviceCount !== 1 ? 's' : ''}`);
+    if (snap.editorCount)          parts.push(`${snap.editorCount} editor${snap.editorCount   !== 1 ? 's' : ''}`);
+    if (parts.length > 0) {
+        line2.add_child(new St.Label({
+            text: parts.join('  ·  '),
             style_class: 'dw-muted',
-            width: 46,
+            x_expand: true,
             y_align: Clutter.ActorAlign.CENTER,
         }));
     }
 
-    const restoreBtn = new St.Button({ label: 'Restore', style_class: 'dw-btn-load', reactive: true, can_focus: true, track_hover: true });
-    restoreBtn.connect('clicked', () => onRestore?.(snap.filename));
-    row.add_child(restoreBtn);
+    const restoreBtn = new St.Button({
+        label: 'Resume',
+        style_class: 'dw-btn-load',
+        reactive: true, can_focus: true, track_hover: true,
+    });
+    restoreBtn.connect('clicked', () => {
+        restoreBtn.label    = 'Resuming…';
+        restoreBtn.reactive = false;
+        onRestore?.(snap.filename);
+    });
+    line2.add_child(restoreBtn);
 
     const delBtn = new St.Button({ label: 'Delete', style_class: 'dw-btn-delete', reactive: true, can_focus: true, track_hover: true });
     delBtn.connect('clicked', () => onDelete?.(snap.filename));
-    row.add_child(delBtn);
+    line2.add_child(delBtn);
 
-    item.add_child(row);
+    outer.add_child(line2);
+    item.add_child(outer);
+    item.label.hide();
+    return item;
+}
+
+function _buildLastWorkspaceRow(snap, onRestore) {
+    const item = new PopupMenu.PopupMenuItem('', { reactive: false });
+    item.add_style_class_name('dw-last-workspace');
+    const outer = new St.BoxLayout({ vertical: true, x_expand: true });
+    outer.spacing = 2;
+
+    // Line 1: icon + label + timestamp + Resume button
+    const line1 = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
+    line1.spacing = 8;
+    line1.add_child(new St.Label({
+        text: '↺  Last Workspace',
+        style_class: 'dw-last-workspace-label',
+        x_expand: true,
+        y_align: Clutter.ActorAlign.CENTER,
+    }));
+    const savedAt = snap.savedAt ? _formatDate(snap.savedAt) : '';
+    if (savedAt) line1.add_child(new St.Label({ text: savedAt, style_class: 'dw-snap-meta', y_align: Clutter.ActorAlign.CENTER }));
+    const resumeBtn = new St.Button({
+        label: 'Resume',
+        style_class: 'dw-btn-load',
+        reactive: true, can_focus: true, track_hover: true,
+        y_align: Clutter.ActorAlign.CENTER,
+    });
+    resumeBtn.connect('clicked', () => {
+        resumeBtn.label = 'Resuming…';
+        resumeBtn.reactive = false;
+        onRestore?.('_last_workspace_.json');
+    });
+    line1.add_child(resumeBtn);
+    outer.add_child(line1);
+
+    // Line 2: summary counts
+    const projects = snap.projects ?? [];
+    const pc = projects.length;
+    const sc = projects.reduce((n, p) => n + (p.services?.length ?? 0), 0);
+    const ec = projects.reduce((n, p) => n + (p.editors?.length  ?? 0), 0);
+    const parts = [];
+    if (pc) parts.push(`${pc} project${pc !== 1 ? 's' : ''}`);
+    if (sc) parts.push(`${sc} service${sc !== 1 ? 's' : ''}`);
+    if (ec) parts.push(`${ec} editor${ec !== 1 ? 's' : ''}`);
+    if (parts.length > 0) {
+        const line2 = new St.BoxLayout({ x_expand: true });
+        line2.add_child(new St.Label({ text: parts.join('  ·  '), style_class: 'dw-muted', x_expand: true }));
+        outer.add_child(line2);
+    }
+
+    item.add_child(outer);
     item.label.hide();
     return item;
 }

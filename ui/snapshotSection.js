@@ -1,10 +1,11 @@
 /**
- * DevWatch — ui/snapshotSection.js  (v3)
+ * DevWatch — ui/snapshotSection.js  (v4)
  *
  * Section: "Dev Sessions"
- *
- * Save, restore, and delete workspace snapshots.
- * Phase 4: inline naming entry, Resuming… feedback, Autosave label alias.
+ * Completely redesigned following GNOME guidelines:
+ * - Two-line row layout: Title + Subtitle stack on left, actions on right.
+ * - Iconography for standard actions.
+ * - Clear, airy, card-like spacing.
  */
 
 import St from 'gi://St';
@@ -19,11 +20,10 @@ export function buildSnapshotSection(menu, snapshots, callbacks, lastWorkspace =
     clearSnapshotSection(menu);
     const { onSave, onRestore, onDelete } = callbacks ?? {};
 
-    // Collapsible sub-menu: "Sessions  [Save]"
     const sub = new PopupMenu.PopupSubMenuMenuItem('', false);
     sub._devwatchSection = SECTION_TAG;
 
-    // ── Header row: "Sessions"  [Save] ─────────────────────────────────────
+    // ── Header row ────────────────────────────────────────────────────────
     const headerRow = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
     headerRow.add_child(new St.Label({ text: _('Sessions'), style_class: 'dw-section-label', x_expand: true }));
 
@@ -38,15 +38,15 @@ export function buildSnapshotSection(menu, snapshots, callbacks, lastWorkspace =
     sub.label.get_parent().insert_child_above(headerRow, sub.label);
     sub.label.hide();
 
-    // ── Inline naming row (hidden until Save is clicked) ──────────────────
+    // ── Inline naming row ──────────────────────────────────────────────────
     const namingItem = new PopupMenu.PopupMenuItem('', { reactive: false });
-    namingItem.add_style_class_name('dw-snap-naming-row');
+    namingItem.add_style_class_name('dw-session-naming-row');
     const namingBox = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
     namingBox.spacing = 6;
 
     const entry = new St.Entry({
         hint_text: _('Session name…'),
-        style_class: 'dw-snap-entry',
+        style_class: 'dw-session-entry',
         x_expand: true,
         can_focus: true,
     });
@@ -75,7 +75,6 @@ export function buildSnapshotSection(menu, snapshots, callbacks, lastWorkspace =
         saveBtn.opacity  = 80;
         entry.set_text('');
         namingItem.visible = true;
-        // Focus the text entry after layout settles
         entry.grab_key_focus();
     };
     const _hideNaming = () => {
@@ -91,7 +90,6 @@ export function buildSnapshotSection(menu, snapshots, callbacks, lastWorkspace =
         _hideNaming();
         onSave?.(label);
     });
-    // Also confirm on Enter key
     entry.clutter_text.connect('activate', () => {
         const label = entry.get_text().trim() || 'auto';
         _hideNaming();
@@ -99,28 +97,28 @@ export function buildSnapshotSection(menu, snapshots, callbacks, lastWorkspace =
     });
 
     menu.addMenuItem(sub);
-    sub.menu.addMenuItem(namingItem, 0); // insert at top of sub-menu
+    sub.menu.addMenuItem(namingItem, 0);
     namingItem.visible = false;
 
-    // ── Sticky "Last Workspace" entry (auto-saved on every poll + shutdown) ─────
+    // ── Session list ────────────────────────────────────────────────────────
     if (lastWorkspace) {
-        sub.menu.addMenuItem(_buildLastWorkspaceRow(lastWorkspace, onRestore));
+        sub.menu.addMenuItem(_buildRow(lastWorkspace, true, onRestore, onDelete));
     }
 
     if (!snapshots || snapshots.length === 0) {
-        const empty = new PopupMenu.PopupMenuItem(_('  No saved sessions yet — click Save'), { reactive: false });
-        empty.label.style_class = 'dw-dim';
+        const empty = new PopupMenu.PopupMenuItem(_('  No saved sessions yet'), { reactive: false });
+        empty.label.style_class = 'dw-session-subtitle';
         sub.menu.addMenuItem(empty);
         _addSep(menu);
         return;
     }
 
     for (const snap of snapshots.slice(0, MAX_ROWS)) {
-        sub.menu.addMenuItem(_buildRow(snap, onRestore, onDelete));
+        sub.menu.addMenuItem(_buildRow(snap, false, onRestore, onDelete));
     }
     if (snapshots.length > MAX_ROWS) {
         const more = new PopupMenu.PopupMenuItem(`  … and ${snapshots.length - MAX_ROWS} older sessions`, { reactive: false });
-        more.label.style_class = 'dw-dim';
+        more.label.style_class = 'dw-session-subtitle';
         sub.menu.addMenuItem(more);
     }
     _addSep(menu);
@@ -131,130 +129,88 @@ export function clearSnapshotSection(menu) {
         item.destroy();
 }
 
-function _buildRow(snap, onRestore, onDelete) {
+function _buildRow(snap, isLastWorkspace, onRestore, onDelete) {
     const item = new PopupMenu.PopupMenuItem('', { reactive: false });
-    item.add_style_class_name('dw-snap-item');
-    const outer = new St.BoxLayout({ vertical: true, x_expand: true });
-    outer.spacing = 3;
+    item.add_style_class_name(isLastWorkspace ? 'dw-session-card-primary' : 'dw-session-card');
+    
+    // Overall horizontal layout
+    const outer = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
+    outer.spacing = 12;
 
-    // Line 1: name  ───expand───  date  [Resume]  [×]
-    const line1 = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
-    line1.spacing = 6;
-
-    const displayLabel = (snap.label === 'auto' || !snap.label) ? 'Autosave' : snap.label;
-    line1.add_child(new St.Label({
-        text: _truncate(displayLabel, 26),
-        style_class: 'dw-snap-name',
-        x_expand: true,
-        y_align: Clutter.ActorAlign.CENTER,
-    }));
-    line1.add_child(new St.Label({
-        text: _formatDate(snap.savedAt),
-        style_class: 'dw-snap-date',
-        y_align: Clutter.ActorAlign.CENTER,
-    }));
-
-    const restoreBtn = new St.Button({
-        label: _('Resume'),
-        style_class: 'dw-btn-resume',
-        reactive: true, can_focus: true, track_hover: true,
-        y_align: Clutter.ActorAlign.CENTER,
-    });
-    restoreBtn.connect('clicked', () => {
-        restoreBtn.label    = _('Resuming…');
-        restoreBtn.reactive = false;
-        onRestore?.(snap.filename);
-    });
-    line1.add_child(restoreBtn);
-
-    const delBtn = new St.Button({
-        label: '×',
-        style_class: 'dw-btn-snap-delete',
-        reactive: true, can_focus: true, track_hover: true,
-        y_align: Clutter.ActorAlign.CENTER,
-    });
-    delBtn.connect('clicked', () => onDelete?.(snap.filename));
-    line1.add_child(delBtn);
-
-    outer.add_child(line1);
-
-    // Line 2: meta counts (secondary, muted)
-    const parts = [];
-    if (snap.projectCount != null) parts.push(`${snap.projectCount} project${snap.projectCount !== 1 ? 's' : ''}`);
-    if (snap.serviceCount)         parts.push(`${snap.serviceCount} service${snap.serviceCount !== 1 ? 's' : ''}`);
-    if (snap.editorCount)          parts.push(`${snap.editorCount} editor${snap.editorCount   !== 1 ? 's' : ''}`);
-    if (parts.length > 0) {
-        outer.add_child(new St.Label({
-            text: parts.join('  ·  '),
-            style_class: 'dw-muted',
-            x_expand: true,
+    // Left container for Title + Subtitle
+    const textStack = new St.BoxLayout({ vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER });
+    
+    const titleBox = new St.BoxLayout({ y_align: Clutter.ActorAlign.CENTER });
+    titleBox.spacing = 6;
+    
+    if (isLastWorkspace) {
+        titleBox.add_child(new St.Icon({
+            icon_name: 'document-revert-symbolic',
+            icon_size: 14,
+            style_class: 'dw-session-icon-primary'
+        }));
+        titleBox.add_child(new St.Label({
+            text: _('Last Workspace'),
+            style_class: 'dw-session-title-primary'
+        }));
+    } else {
+        const displayLabel = (snap.label === 'auto' || !snap.label) ? 'Autosave' : snap.label;
+        titleBox.add_child(new St.Label({
+            text: _truncate(displayLabel, 26),
+            style_class: 'dw-session-title'
         }));
     }
+    textStack.add_child(titleBox);
 
-    item.add_child(outer);
-    item.label.hide();
-    return item;
-}
+    // Subtitle line (Date · 3 projects · 7 services)
+    const subtitleParts = [];
+    if (snap.savedAt) subtitleParts.push(_formatDate(snap.savedAt));
+    
+    const projCount = snap.projectCount ?? (snap.projects?.length || 0);
+    const svcCount = snap.serviceCount ?? ((snap.projects || []).reduce((n, p) => n + (p.services?.length || 0), 0));
+    
+    if (projCount) subtitleParts.push(`${projCount} proj`);
+    if (svcCount) subtitleParts.push(`${svcCount} svcs`);
 
-function _buildLastWorkspaceRow(snap, onRestore) {
-    const item = new PopupMenu.PopupMenuItem('', { reactive: false });
-    item.add_style_class_name('dw-last-workspace');
-    const outer = new St.BoxLayout({ vertical: true, x_expand: true });
-    outer.spacing = 3;
-
-    // Line 1: icon+label  ───expand───  date  [Resume]
-    const line1 = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
-    line1.spacing = 6;
-
-    line1.add_child(new St.Label({
-        text: '↺  Last Workspace',
-        style_class: 'dw-last-workspace-label',
-        x_expand: true,
-        y_align: Clutter.ActorAlign.CENTER,
+    textStack.add_child(new St.Label({
+        text: subtitleParts.join('  ·  '),
+        style_class: 'dw-session-subtitle'
     }));
 
-    const savedAt = snap.savedAt ? _formatDate(snap.savedAt) : '';
-    if (savedAt) {
-        line1.add_child(new St.Label({
-            text: savedAt,
-            style_class: 'dw-snap-date',
-            y_align: Clutter.ActorAlign.CENTER,
-        }));
-    }
+    outer.add_child(textStack);
+
+    // Right container for Actions
+    const actionBox = new St.BoxLayout({ y_align: Clutter.ActorAlign.CENTER });
+    actionBox.spacing = 6;
 
     const resumeBtn = new St.Button({
         label: _('Resume'),
-        style_class: 'dw-btn-resume',
+        style_class: 'dw-session-btn-resume',
         reactive: true, can_focus: true, track_hover: true,
         y_align: Clutter.ActorAlign.CENTER,
     });
     resumeBtn.connect('clicked', () => {
-        resumeBtn.label    = _('Resuming…');
+        resumeBtn.label = _('Resuming…');
         resumeBtn.reactive = false;
-        onRestore?.('_last_workspace_.json');
+        onRestore?.(isLastWorkspace ? '_last_workspace_.json' : snap.filename);
     });
-    line1.add_child(resumeBtn);
-    outer.add_child(line1);
+    actionBox.add_child(resumeBtn);
 
-    // Line 2: meta counts (muted)
-    const projects = snap.projects ?? [];
-    const pc = projects.length;
-    const sc = projects.reduce((n, p) => n + (p.services?.length ?? 0), 0);
-    const ec = projects.reduce((n, p) => n + (p.editors?.length  ?? 0), 0);
-    const parts = [];
-    if (pc) parts.push(`${pc} project${pc !== 1 ? 's' : ''}`);
-    if (sc) parts.push(`${sc} service${sc !== 1 ? 's' : ''}`);
-    if (ec) parts.push(`${ec} editor${ec !== 1 ? 's' : ''}`);
-    if (parts.length > 0) {
-        outer.add_child(new St.Label({
-            text: parts.join('  ·  '),
-            style_class: 'dw-muted',
-            x_expand: true,
-        }));
+    if (!isLastWorkspace) {
+        const delBtn = new St.Button({
+            child: new St.Icon({ icon_name: 'user-trash-symbolic', icon_size: 14 }),
+            style_class: 'dw-session-btn-icon-danger',
+            reactive: true, can_focus: true, track_hover: true,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        delBtn.connect('clicked', () => onDelete?.(snap.filename));
+        actionBox.add_child(delBtn);
     }
 
+    outer.add_child(actionBox);
     item.add_child(outer);
     item.label.hide();
+    
     return item;
 }
 
@@ -265,7 +221,7 @@ function _formatDate(iso) {
         if (isNaN(d.getTime())) return iso.slice(0, 16);
         const day   = String(d.getDate()).padStart(2, '0');
         const month = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()];
-        return `${day} ${month}  ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+        return `${day} ${month} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
     } catch (_) { return iso.slice(0, 16); }
 }
 function _truncate(s, n) { return s && s.length > n ? s.slice(0, n - 1) + '…' : (s ?? ''); }

@@ -315,6 +315,30 @@
     color: #ed333b;
     background-color: rgba(237,51,59,0.12);
 }
+/* Resume pill — primary action in session rows */
+.dw-btn-resume {
+    font-size: 11px;
+    font-weight: 500;
+    color: #78aeed;
+    padding: 3px 10px;
+    border-radius: 5px;
+    background-color: rgba(120,174,237,0.11);
+}
+.dw-btn-resume:hover {
+    color: #c0d8f8;
+    background-color: rgba(120,174,237,0.22);
+}
+/* × dismiss — ghost button, reveals red on hover */
+.dw-btn-snap-delete {
+    font-size: 13px;
+    color: #525252;
+    padding: 3px 8px;
+    border-radius: 5px;
+}
+.dw-btn-snap-delete:hover {
+    color: #ed333b;
+    background-color: rgba(237,51,59,0.12);
+}
 
 /* ── Cleanup / Issues ──────────────────────────────────────────────────────── */
 .dw-issue-ok {
@@ -339,26 +363,49 @@
 .dw-issue-reason-frozen  { color: #ed333b; background-color: rgba(237,51,59,0.10); }
 
 /* ── Snapshots ─────────────────────────────────────────────────────────────── */
+
+/* Override the 1px sub-menu padding for session-specific row classes       */
+.devwatch-menu .popup-sub-menu .dw-snap-item {
+    padding-top: 7px;
+    padding-bottom: 7px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+}
+.devwatch-menu .popup-sub-menu .dw-last-workspace {
+    padding-top: 7px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    margin-bottom: 3px;
+    background-color: rgba(120,174,237,0.04);
+    border-radius: 5px;
+}
+.devwatch-menu .popup-sub-menu .dw-snap-naming-row {
+    padding-top: 5px;
+    padding-bottom: 5px;
+}
+
 .dw-snap-name {
     font-size: 12px;
-    font-weight: bold;
+    font-weight: 600;
     color: #dddddd;
     x-expand: true;
     y-align: center;
 }
+/* Date — compact, no fixed width */
+.dw-snap-date {
+    font-size: 10px;
+    color: #666666;
+    y-align: center;
+    padding-left: 4px;
+    padding-right: 2px;
+}
+/* Keep for older snapshots loaded before the rename */
 .dw-snap-meta {
     font-size: 10px;
-    color: #888888;
+    color: #666666;
     y-align: center;
-    width: 80px;
 }
 
-/* Last Workspace sticky entry                                               */
-.dw-last-workspace {
-    border-bottom: 1px solid rgba(255,255,255,0.07);
-    margin-bottom: 4px;
-    padding-bottom: 6px;
-}
+/* Last Workspace sticky header */
 .dw-last-workspace-label {
     font-size: 12px;
     font-weight: 600;
@@ -381,8 +428,8 @@
     background-color: rgba(255,255,255,0.09);
 }
 .dw-snap-naming-row {
-    padding-top: 4px;
-    padding-bottom: 4px;
+    padding-top: 5px;
+    padding-bottom: 5px;
 }
 
 /* ── Build section ─────────────────────────────────────────────────────────── */

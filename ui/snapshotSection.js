@@ -133,51 +133,64 @@ export function clearSnapshotSection(menu) {
 
 function _buildRow(snap, onRestore, onDelete) {
     const item = new PopupMenu.PopupMenuItem('', { reactive: false });
+    item.add_style_class_name('dw-snap-item');
     const outer = new St.BoxLayout({ vertical: true, x_expand: true });
-    outer.spacing = 2;
+    outer.spacing = 3;
 
-    // Line 1: name  ·  date
+    // Line 1: name  ───expand───  date  [Resume]  [×]
     const line1 = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
-    line1.spacing = 8;
+    line1.spacing = 6;
+
     const displayLabel = (snap.label === 'auto' || !snap.label) ? 'Autosave' : snap.label;
-    line1.add_child(new St.Label({ text: _truncate(displayLabel, 28), style_class: 'dw-snap-name', x_expand: true }));
-    line1.add_child(new St.Label({ text: _formatDate(snap.savedAt), style_class: 'dw-snap-meta' }));
+    line1.add_child(new St.Label({
+        text: _truncate(displayLabel, 26),
+        style_class: 'dw-snap-name',
+        x_expand: true,
+        y_align: Clutter.ActorAlign.CENTER,
+    }));
+    line1.add_child(new St.Label({
+        text: _formatDate(snap.savedAt),
+        style_class: 'dw-snap-date',
+        y_align: Clutter.ActorAlign.CENTER,
+    }));
+
+    const restoreBtn = new St.Button({
+        label: _('Resume'),
+        style_class: 'dw-btn-resume',
+        reactive: true, can_focus: true, track_hover: true,
+        y_align: Clutter.ActorAlign.CENTER,
+    });
+    restoreBtn.connect('clicked', () => {
+        restoreBtn.label    = _('Resuming…');
+        restoreBtn.reactive = false;
+        onRestore?.(snap.filename);
+    });
+    line1.add_child(restoreBtn);
+
+    const delBtn = new St.Button({
+        label: '×',
+        style_class: 'dw-btn-snap-delete',
+        reactive: true, can_focus: true, track_hover: true,
+        y_align: Clutter.ActorAlign.CENTER,
+    });
+    delBtn.connect('clicked', () => onDelete?.(snap.filename));
+    line1.add_child(delBtn);
+
     outer.add_child(line1);
 
-    // Line 2: meta summary  [Resume]  [Delete]
-    const line2 = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
-    line2.spacing = 6;
-
+    // Line 2: meta counts (secondary, muted)
     const parts = [];
     if (snap.projectCount != null) parts.push(`${snap.projectCount} project${snap.projectCount !== 1 ? 's' : ''}`);
     if (snap.serviceCount)         parts.push(`${snap.serviceCount} service${snap.serviceCount !== 1 ? 's' : ''}`);
     if (snap.editorCount)          parts.push(`${snap.editorCount} editor${snap.editorCount   !== 1 ? 's' : ''}`);
     if (parts.length > 0) {
-        line2.add_child(new St.Label({
+        outer.add_child(new St.Label({
             text: parts.join('  ·  '),
             style_class: 'dw-muted',
             x_expand: true,
-            y_align: Clutter.ActorAlign.CENTER,
         }));
     }
 
-    const restoreBtn = new St.Button({
-        label: 'Resume',
-        style_class: 'dw-btn-load',
-        reactive: true, can_focus: true, track_hover: true,
-    });
-    restoreBtn.connect('clicked', () => {
-        restoreBtn.label    = 'Resuming…';
-        restoreBtn.reactive = false;
-        onRestore?.(snap.filename);
-    });
-    line2.add_child(restoreBtn);
-
-    const delBtn = new St.Button({ label: 'Delete', style_class: 'dw-btn-delete', reactive: true, can_focus: true, track_hover: true });
-    delBtn.connect('clicked', () => onDelete?.(snap.filename));
-    line2.add_child(delBtn);
-
-    outer.add_child(line2);
     item.add_child(outer);
     item.label.hide();
     return item;
@@ -187,34 +200,43 @@ function _buildLastWorkspaceRow(snap, onRestore) {
     const item = new PopupMenu.PopupMenuItem('', { reactive: false });
     item.add_style_class_name('dw-last-workspace');
     const outer = new St.BoxLayout({ vertical: true, x_expand: true });
-    outer.spacing = 2;
+    outer.spacing = 3;
 
-    // Line 1: icon + label + timestamp + Resume button
+    // Line 1: icon+label  ───expand───  date  [Resume]
     const line1 = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
-    line1.spacing = 8;
+    line1.spacing = 6;
+
     line1.add_child(new St.Label({
         text: '↺  Last Workspace',
         style_class: 'dw-last-workspace-label',
         x_expand: true,
         y_align: Clutter.ActorAlign.CENTER,
     }));
+
     const savedAt = snap.savedAt ? _formatDate(snap.savedAt) : '';
-    if (savedAt) line1.add_child(new St.Label({ text: savedAt, style_class: 'dw-snap-meta', y_align: Clutter.ActorAlign.CENTER }));
+    if (savedAt) {
+        line1.add_child(new St.Label({
+            text: savedAt,
+            style_class: 'dw-snap-date',
+            y_align: Clutter.ActorAlign.CENTER,
+        }));
+    }
+
     const resumeBtn = new St.Button({
-        label: 'Resume',
-        style_class: 'dw-btn-load',
+        label: _('Resume'),
+        style_class: 'dw-btn-resume',
         reactive: true, can_focus: true, track_hover: true,
         y_align: Clutter.ActorAlign.CENTER,
     });
     resumeBtn.connect('clicked', () => {
-        resumeBtn.label = 'Resuming…';
+        resumeBtn.label    = _('Resuming…');
         resumeBtn.reactive = false;
         onRestore?.('_last_workspace_.json');
     });
     line1.add_child(resumeBtn);
     outer.add_child(line1);
 
-    // Line 2: summary counts
+    // Line 2: meta counts (muted)
     const projects = snap.projects ?? [];
     const pc = projects.length;
     const sc = projects.reduce((n, p) => n + (p.services?.length ?? 0), 0);
@@ -224,9 +246,11 @@ function _buildLastWorkspaceRow(snap, onRestore) {
     if (sc) parts.push(`${sc} service${sc !== 1 ? 's' : ''}`);
     if (ec) parts.push(`${ec} editor${ec !== 1 ? 's' : ''}`);
     if (parts.length > 0) {
-        const line2 = new St.BoxLayout({ x_expand: true });
-        line2.add_child(new St.Label({ text: parts.join('  ·  '), style_class: 'dw-muted', x_expand: true }));
-        outer.add_child(line2);
+        outer.add_child(new St.Label({
+            text: parts.join('  ·  '),
+            style_class: 'dw-muted',
+            x_expand: true,
+        }));
     }
 
     item.add_child(outer);

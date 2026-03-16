@@ -25,7 +25,7 @@ export function buildSnapshotSection(menu, snapshots, callbacks, lastWorkspace =
 
     // ── Header row ────────────────────────────────────────────────────────
     const headerRow = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
-    headerRow.set_style('margin-top: 6px; margin-bottom: 6px; margin-right: 4px;');
+    headerRow.set_style('margin-top: 8px; margin-bottom: 6px; margin-right: 4px;');
 
     // Give x_expand directly to the label as a GObject property (not CSS).
     // This tells the parent BoxLayout's layout engine to allocate all extra
@@ -56,11 +56,11 @@ export function buildSnapshotSection(menu, snapshots, callbacks, lastWorkspace =
     namingItem.add_style_class_name('dw-session-naming-row');
     const namingBox = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
     namingBox.set_style('margin-top: 4px; margin-bottom: 8px; margin-right: 6px; margin-left: 6px;');
-    namingBox.spacing = 8;
+    namingBox.spacing = 12;
 
     const entry = new St.Entry({
         hint_text: _('Session name…'),
-        style_class: 'dw-session-entry',
+        style_class: 'dw-snap-entry',
         x_expand: true,
         can_focus: true,
     });
@@ -78,7 +78,6 @@ export function buildSnapshotSection(menu, snapshots, callbacks, lastWorkspace =
         reactive: true, can_focus: true, track_hover: true,
         y_align: Clutter.ActorAlign.CENTER,
     });
-    cancelBtn.set_style('margin-left: 6px;');
 
     namingBox.add_child(entry);
     namingBox.add_child(confirmBtn);
@@ -88,6 +87,7 @@ export function buildSnapshotSection(menu, snapshots, callbacks, lastWorkspace =
     namingItem._devwatchSection = SECTION_TAG;
 
     const _showNaming = () => {
+        sub.setSubmenuShown(true);
         saveBtn.reactive = false;
         saveBtn.opacity  = 80;
         entry.set_text('');

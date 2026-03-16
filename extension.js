@@ -16,8 +16,6 @@
  *   • buildPortSection — Kill / Copy PID per port row
  *
  * Pillar 3 — fully wired:
- *   • CleanupEngine   — zombie / orphan / idle-dev detection
- *   • buildCleanupSection — Clean All + per-candidate Kill
  *   • Status dot: red on zombie OR port conflict, yellow on orphan/idle/highCPU
  *
  * Pillar 4 — fully wired:
@@ -46,11 +44,9 @@ import { ProjectDetector }    from './core/projectDetector.js';
 import { ProcessTracker }     from './core/processTracker.js';
 import { PortMonitor }        from './core/portMonitor.js';
 import { ConflictNotifier }   from './core/conflictNotifier.js';
-import { CleanupEngine }        from './core/cleanupEngine.js';
 import { SnapshotManager }      from './core/snapshotManager.js';
 import { buildProjectSection }  from './ui/projectSection.js';
 import { buildPortSection }     from './ui/portSection.js';
-import { buildCleanupSection }  from './ui/cleanupSection.js';
 import { buildSnapshotSection } from './ui/snapshotSection.js';
 import { BuildDetector }         from './core/buildDetector.js';
 import { buildPerfSection }      from './ui/perfSection.js';
@@ -75,7 +71,6 @@ export default class DevWatchExtension extends Extension {
         this._processTracker    = new ProcessTracker();
         this._portMonitor       = new PortMonitor();
         this._conflictNotifier  = new ConflictNotifier();
-        this._cleanupEngine     = new CleanupEngine();
         this._snapshotManager   = new SnapshotManager();
         this._buildDetector     = new BuildDetector();
 
@@ -243,8 +238,6 @@ export default class DevWatchExtension extends Extension {
         this._conflictNotifier?.destroy();
         this._conflictNotifier = null;
 
-        this._cleanupEngine?.destroy();
-        this._cleanupEngine = null;
 
         this._snapshotManager?.stop();
         this._snapshotManager = null;
@@ -332,15 +325,6 @@ export default class DevWatchExtension extends Extension {
         this._conflictNotifier?.pruneNotified(activePids);
         this._conflictNotifier?.notify(portResult.newPorts, notifyEnabled);
 
-        // Run cleanup analysis
-        const idleThresholdMinutes = this._settings?.get_int('idle-threshold-minutes') ?? 10;
-        const portPids = new Set(
-            (portResult.ports ?? []).filter(r => r.pid).map(r => r.pid)
-        );
-        const cleanupResult = this._cleanupEngine
-            ? this._cleanupEngine.analyse(projectMap, portPids, idleThresholdMinutes)
-            : { candidates: [], scannedAt: 0 };
-
         // Run build detection
         const buildResult = this._buildDetector
             ? this._buildDetector.analyse(projectMap)
@@ -355,13 +339,11 @@ export default class DevWatchExtension extends Extension {
             this._indicator.menu,
             projectMap,
             portResult,
-            cleanupResult,
             () => this._refresh().catch(e => this._logError(e)),
-            () => this._stopAllProjects(),
-            () => this._cleanEnvironment(cleanupResult)
+            () => this._stopAllProjects()
         );
         // Problems / Alerts section — shown only when issues exist
-        buildAlertsSection(this._indicator.menu, projectMap, portResult, cleanupResult);
+        buildAlertsSection(this._indicator.menu, projectMap, portResult);
         buildProjectSection(this._indicator.menu, projectMap, portResult);
         buildPortSection(
             this._indicator.menu,
@@ -369,11 +351,7 @@ export default class DevWatchExtension extends Extension {
             (pid, port) => this._killProcess(pid, port),
             showSystemPorts
         );
-        buildCleanupSection(
-            this._indicator.menu,
-            cleanupResult,
-            pid => this._killProcess(pid, null)
-        );
+
         buildSnapshotSection(
             this._indicator.menu,
             this._snapshots ?? [],
@@ -387,7 +365,7 @@ export default class DevWatchExtension extends Extension {
         buildPerfSection(this._indicator.menu, buildResult, maxBuildHistory);
 
         // Update status dot colour
-        this._updateStatusDot(projectMap, portResult, cleanupResult, buildResult);
+        this._updateStatusDot(projectMap, portResult, buildResult);
 
         // Auto-save last workspace (fire-and-forget — never blocks the UI)
         this._snapshotManager?.saveLastWorkspace(projectMap, portResult)
@@ -502,7 +480,6 @@ export default class DevWatchExtension extends Extension {
     /**
      * Kill all cleanup candidates (orphans + idle-dev; never zombies).
      * Triggered by the "Clean Dev Environment" quick-action button.
-     * @param {{ candidates: object[] }} cleanupResult
      */
     _cleanEnvironment(cleanupResult) {
         const killable = (cleanupResult?.candidates ?? []).filter(c => c.reason !== 'zombie');
@@ -529,20 +506,15 @@ export default class DevWatchExtension extends Extension {
      *
      * @param {Map<string, object>} projectMap
      * @param {{ ports: object[], newPorts: object[] }} portResult
-     * @param {{ candidates: object[] }} cleanupResult
      */
     _updateStatusDot(
         projectMap,
         portResult     = { ports: [], newPorts: [] },
-        cleanupResult  = { candidates: [] },
         buildResult    = { active: [], history: new Map() }
     ) {
         if (!this._statusDot) return;
 
-        const hasZombie    = cleanupResult.candidates.some(c => c.reason === 'zombie');
-        const hasOrphan    = cleanupResult.candidates.some(c => c.reason === 'orphan');
         const hasConflict  = portResult.newPorts?.length > 0;
-        const hasIdle      = cleanupResult.candidates.some(c => c.reason === 'idle_dev');
         const highCpu      = projectMap && [...projectMap.values()].some(p =>
             p.totalCpuPercent > 80
         );
@@ -550,8 +522,8 @@ export default class DevWatchExtension extends Extension {
         const buildingHot  = buildResult.active?.some(r => r.peakCpuPct > 90);
 
         let dotClass = 'devwatch-dot-green';
-        if (hasZombie || hasOrphan || hasConflict) dotClass = 'devwatch-dot-red';
-        else if (highCpu || hasIdle || buildingHot) dotClass = 'devwatch-dot-yellow';
+        if (hasConflict) dotClass = 'devwatch-dot-red';
+        else if (highCpu || buildingHot) dotClass = 'devwatch-dot-yellow';
 
         this._statusDot.style_class = `devwatch-dot ${dotClass}`;
     }

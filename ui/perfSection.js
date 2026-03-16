@@ -50,7 +50,7 @@ export function buildPerfSection(menu, buildResult, maxRows = DEFAULT_MAX_HISTOR
     // ── Active builds ──────────────────────────────────────────────────────
     if (active.length === 0) {
         const emptyActive = new PopupMenu.PopupMenuItem(_('  No active builds'), { reactive: false });
-        emptyActive.label.style_class = 'dw-dim';
+        emptyActive.label.style_class = 'dw-dim dw-build-empty';
         emptyActive._devwatchSection = SECTION_TAG;
         menu.addMenuItem(emptyActive);
     } else {
@@ -96,6 +96,7 @@ function _buildActiveRow(run) {
     item.add_style_class_name('dw-build-active-card');
 
     const row  = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+    row.add_style_class_name('dw-build-active-row');
     row.spacing = 10;
 
     row.add_child(new St.Icon({
@@ -105,6 +106,7 @@ function _buildActiveRow(run) {
     }));
     
     const textStack = new St.BoxLayout({ vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER });
+    textStack.add_style_class_name('dw-build-active-text');
 
     // "Building tracktite" — project name is the primary label
     const proj = run.projectRoot
@@ -163,6 +165,7 @@ function _buildHistoryRow(run) {
     
     // Right-aligned stats
     const statsBox = new St.BoxLayout({ y_align: Clutter.ActorAlign.CENTER });
+    statsBox.add_style_class_name('dw-build-stats-row');
     statsBox.spacing = 6;
 
     statsBox.add_child(new St.Label({

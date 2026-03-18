@@ -18,6 +18,7 @@ import { _ } from '../utils/i18n.js';
 
 const SECTION_TAG = 'devwatch-ports';
 const MAX_PORTS_SHOWN = 15;
+const INTERNAL_SCROLL_THRESHOLD = 4;
 
 export function buildPortSection(menu, scanResult, onKill, showSystemPorts = false) {
     clearPortSection(menu);
@@ -51,10 +52,37 @@ export function buildPortSection(menu, scanResult, onKill, showSystemPorts = fal
     const ordered = [...devPorts, ...sysPorts]
         .filter(r => { if (seenPorts.has(r.port)) return false; seenPorts.add(r.port); return true; })
         .slice(0, MAX_PORTS_SHOWN);
-    for (const record of ordered) {
-        const item = _buildRow(record, onKill);
-        item._devwatchSection = SECTION_TAG;
-        menu.addMenuItem(item);
+    if (ordered.length > INTERNAL_SCROLL_THRESHOLD) {
+        const scrollerItem = new PopupMenu.PopupBaseMenuItem({
+            reactive: false,
+            can_focus: false,
+            activate: false,
+        });
+        scrollerItem.add_style_class_name('dw-section-scroll-item');
+        scrollerItem._devwatchSection = SECTION_TAG;
+
+        const scrollView = new St.ScrollView({
+            style_class: 'dw-section-scroll dw-section-scroll-ports',
+            overlay_scrollbars: false,
+            reactive: true,
+            x_expand: true,
+        });
+        scrollView.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC);
+
+        const section = new PopupMenu.PopupMenuSection();
+        for (const record of ordered) {
+            section.addMenuItem(_buildRow(record, onKill));
+        }
+
+        scrollView.set_child(section.actor);
+        scrollerItem.add_child(scrollView);
+        menu.addMenuItem(scrollerItem);
+    } else {
+        for (const record of ordered) {
+            const item = _buildRow(record, onKill);
+            item._devwatchSection = SECTION_TAG;
+            menu.addMenuItem(item);
+        }
     }
 
     if (devPorts.length + sysPorts.length > MAX_PORTS_SHOWN) {
@@ -79,11 +107,11 @@ function _buildRow(record, onKill) {
 
     // Vertical outer: line 1 = project/name + Stop; line 2 = detail + runtime
     const outer = new St.BoxLayout({ vertical: true, x_expand: true });
-    outer.spacing = 2;
+    outer.spacing = 0;
 
     // ── Line 1: ● project-name  [Stop right-aligned] ─────────────────────
     const line1 = new St.BoxLayout({ x_expand: true, y_align: Clutter.ActorAlign.CENTER });
-    line1.spacing = 6;
+    line1.spacing = 4;
     line1.add_child(new St.Label({
         text: '●',
         style_class: record.isDevPort ? 'dw-port-dot dw-port-dot-active' : 'dw-port-dot dw-port-dot-dim',

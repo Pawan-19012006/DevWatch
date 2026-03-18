@@ -243,9 +243,8 @@
 
 /* Compact rows + subtle hairline separator between entries                 */
 .devwatch-menu .dw-port-row {
-    padding-top: 4px;
-    padding-bottom: 4px;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
+    padding-top: 3px;
+    padding-bottom: 3px;
 }
 
 .dw-port-project {
@@ -522,8 +521,9 @@
 /* Shared card layout */
 .devwatch-menu .popup-sub-menu .dw-session-card,
 .devwatch-menu .popup-sub-menu .dw-session-card-primary {
-    padding: 9px 12px;
-    margin-bottom: 5px;
+    padding: 10px 14px 13px 14px;
+    margin-top: 0;
+    margin-bottom: 6px;
     margin-right: 12px;
     margin-left: 12px;
     border-radius: 10px;
@@ -648,6 +648,11 @@
     margin-top: 1px;
 }
 
+.devwatch-menu .popup-sub-menu .dw-session-card:last-child,
+.devwatch-menu .popup-sub-menu .dw-session-card-primary:last-child {
+    margin-bottom: 0;
+}
+
 /* Force minimum heights so items never squash and instead trigger the ScrollView */
 .devwatch-menu .popup-menu-item {
     min-height: 24px;
@@ -661,8 +666,65 @@
 .devwatch-menu .popup-sub-menu-item {
     min-height: 26px;
 }
-.dw-build-active-card, .dw-session-card, .dw-session-card-primary {
+.dw-build-active-card {
     min-height: 44px;
 }
 
 .dw-build-hist-row { min-height: 26px; }
+
+/* Section-level internal scroll view */
+.dw-section-scroll {
+    min-height: 180px;
+    max-height: 220px;
+    padding-right: 8px;
+}
+
+/* Remove default menu-item padding around embedded scroll containers. */
+.devwatch-menu .dw-section-scroll-item {
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+/* Target approximately 5 visible project entries before section scroll appears. */
+.dw-section-scroll-projects {
+    min-height: 236px;
+    max-height: 236px;
+}
+
+.dw-section-scroll-ports {
+    min-height: 184px;
+    max-height: 184px;
+}
+
+/* Keep row density consistent with non-scrolling section rendering.
+ * PopupSubMenuMenuItem uses the style class "popup-submenu-menu-item". */
+.devwatch-menu .dw-section-scroll .popup-submenu-menu-item,
+.devwatch-menu .dw-section-scroll .dw-project-row-item {
+    min-height: 40px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+.devwatch-menu .dw-section-scroll .dw-port-row {
+    min-height: 44px;
+    padding-top: 3px;
+    padding-bottom: 3px;
+}
+
+/* Keep text and action buttons off the scrollbar gutter. */
+.devwatch-menu .dw-section-scroll .popup-menu-item {
+    padding-right: 8px;
+}
+
+
+.dw-section-scroll-snapshots {
+    min-height: 252px;
+    max-height: 252px;
+    padding-bottom: 4px;
+}
+
+.devwatch-menu .dw-section-scroll-snapshots .popup-menu-item {
+    min-height: 58px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}

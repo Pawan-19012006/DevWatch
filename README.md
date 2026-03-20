@@ -48,11 +48,7 @@ When you click the **DevWatch** button in your GNOME panel, the dropdown shows:
 
 ### Header Bar
 
-```
-DevWatch                                          ⚙
-3 projects running · 2 ports open · 691 MB RAM
-[Stop All Projects]
-```
+![Header Bar](docs/screenshots/header-card.png)
 
 - **Stats line** — live count of projects, ports, and total RAM
 - **Stop All Projects** — kills every process in every detected project
@@ -62,18 +58,7 @@ DevWatch                                          ⚙
 
 Each project is an expandable card:
 
-```
-● Trackitte                                        ▸
-  5 processes · 277 MB
-```
-
-Expand it to see individual services:
-
-```
-  Python Server  ·  Port 8000
-  Terminal
-  ⏹ Stop Project    ⌨ Open Terminal
-```
+![Running Projects](docs/screenshots/running-projects.png)
 
 - **Service-oriented** — shows "Python Server" instead of raw `python3.12`
 - **Stop Project** — kills all processes in that project
@@ -81,13 +66,7 @@ Expand it to see individual services:
 
 ### 🌐 Open Ports
 
-```
-● Port 5432                                        
-  13m
-
-● trackitte                                   Stop
-  Port 8000 · Python · 3s
-```
+![Open Ports](docs/screenshots/open-ports.png)
 
 - **Dev ports** highlighted with a colored dot (3000, 5173, 8080, etc.)
 - **Project name** shown when a port is linked to a project
@@ -96,17 +75,7 @@ Expand it to see individual services:
 
 ### 📷 Sessions
 
-```
-Sessions                                     Save ▸
-
-  ⟲ Last Workspace                        Resume
-    2 projects • 2 services
-    20 Mar 18:42
-
-  t2                                  Resume  🗑
-    1 project • 5 services
-    20 Mar 17:35
-```
+![Sessions](docs/screenshots/session-workspace.png)
 
 - **Save** — name and save the current workspace
 - **Last Workspace** — automatically saved every refresh (survives reboots)
@@ -115,14 +84,7 @@ Sessions                                     Save ▸
 
 ### ⚡ Build Activity
 
-```
-Build Activity
-
-  ⚙ Building trackitte
-    55ms elapsed · CPU 1%
-
-  Recent Builds                                    ▸
-```
+![Build Activity](docs/screenshots/build-activity.png)
 
 - **Live builds** — shows elapsed time and CPU usage for active builds
 - **Recent Builds** — collapsible history with duration and peak CPU per build

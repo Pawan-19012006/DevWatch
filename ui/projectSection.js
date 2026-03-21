@@ -247,6 +247,20 @@ export function buildProjectSection(menu, projectMap, portResult) {
 }
 
 export function clearProjectSection(menu) {
+    const state = menu._devwatchProjectSectionState;
+    // If the search UI is currently visible, preserve the section's actors
+    // so the search entry and results don't blink during background rebuilds.
+    if (state && state._searchEntry && state._searchEntry.visible) {
+        for (const item of menu._getMenuItems().filter(i => i._devwatchSection === SECTION_TAG)) {
+            if (item === state._titleItem || item === state._containerItem || item === state._resultsBox || item === state._separatorItem)
+                continue;
+
+            item.destroy();
+        }
+        // Keep the persisted state so the section is reused on next build
+        return;
+    }
+
     for (const item of menu._getMenuItems().filter(i => i._devwatchSection === SECTION_TAG))
         item.destroy();
     delete menu._devwatchProjectSectionState;

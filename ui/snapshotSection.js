@@ -10,6 +10,7 @@
 
 import St from 'gi://St';
 import Clutter from 'gi://Clutter';
+import GLib from 'gi://GLib';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import { _ } from '../utils/i18n.js';
 
@@ -66,6 +67,14 @@ export function buildSnapshotSection(menu, snapshots, callbacks, lastWorkspace =
         can_focus: true,
     });
     entry.clutter_text.set_max_length(40);
+    // Restore any in-progress text typed before a rebuild
+    if (menu._devwatchSnapshotNamingText)
+        entry.set_text(menu._devwatchSnapshotNamingText);
+
+    // Persist typed text across background refreshes so user input isn't lost
+    entry.clutter_text.connect('text-changed', () => {
+        menu._devwatchSnapshotNamingText = entry.get_text();
+    });
 
     const confirmBtn = new St.Button({
         label: _('Confirm'),
@@ -90,17 +99,26 @@ export function buildSnapshotSection(menu, snapshots, callbacks, lastWorkspace =
     namingItem.add_child(namingBox);
     namingItem.label.hide();
     namingItem._devwatchSection = SECTION_TAG;
+    // Keep a persistent reference so we can avoid destroying it during background
+    // refreshes (prevents visual blinking while the user is typing).
+    menu._devwatchNamingItem = namingItem;
 
     const _showNaming = () => {
         sub.setSubmenuShown(true);
+        // Persist the naming-open state so periodic refreshes re-open it
+        menu._devwatchSnapshotNamingOpen = true;
         saveBtn.reactive = false;
         saveBtn.opacity  = 80;
-        entry.set_text('');
+        // keep any typed text (do not clear) to avoid losing input
         namingItem.visible = true;
         entry.grab_key_focus();
     };
     const _hideNaming = () => {
+        // Clear persisted flag so rebuild will keep it closed
+        menu._devwatchSnapshotNamingOpen = false;
         namingItem.visible = false;
+        // Clear persisted in-progress text when user explicitly hides
+        menu._devwatchSnapshotNamingText = null;
         saveBtn.reactive = true;
         saveBtn.opacity  = 255;
     };
@@ -110,11 +128,15 @@ export function buildSnapshotSection(menu, snapshots, callbacks, lastWorkspace =
     confirmBtn.connect('clicked', () => {
         const label = entry.get_text().trim() || 'auto';
         _hideNaming();
+        // Clear persisted text on successful save
+        menu._devwatchSnapshotNamingText = null;
         onSave?.(label);
     });
     entry.clutter_text.connect('activate', () => {
         const label = entry.get_text().trim() || 'auto';
         _hideNaming();
+        // Clear persisted text on successful save
+        menu._devwatchSnapshotNamingText = null;
         onSave?.(label);
     });
 
@@ -124,6 +146,13 @@ export function buildSnapshotSection(menu, snapshots, callbacks, lastWorkspace =
     sub.menu.actor.set_style('padding-top: 5px;');
     sub.menu.addMenuItem(namingItem, 0);
     namingItem.visible = false;
+    // If the naming UI was open before a refresh, restore that state.
+    if (menu._devwatchSnapshotNamingOpen) {
+        namingItem.visible = true;
+        sub.setSubmenuShown(true);
+        // Focus the entry after menu is restored
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => { entry.grab_key_focus(); return GLib.SOURCE_REMOVE; });
+    }
 
     // ── Session list ────────────────────────────────────────────────────────
     const totalItems = (lastWorkspace ? 1 : 0) + (snapshots?.length || 0);
@@ -184,8 +213,14 @@ export function buildSnapshotSection(menu, snapshots, callbacks, lastWorkspace =
 }
 
 export function clearSnapshotSection(menu) {
-    for (const item of menu._getMenuItems().filter(i => i._devwatchSection === SECTION_TAG))
+    for (const item of menu._getMenuItems().filter(i => i._devwatchSection === SECTION_TAG)) {
+        // If the naming UI is currently open, preserve that exact item to
+        // avoid destroying/recreating it (which causes a visible blink).
+        if (menu._devwatchSnapshotNamingOpen && menu._devwatchNamingItem && item === menu._devwatchNamingItem)
+            continue;
+
         item.destroy();
+    }
 }
 
 function _buildRow(snap, isLastWorkspace, onRestore, onDelete) {

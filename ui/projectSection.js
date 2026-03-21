@@ -93,14 +93,14 @@ function _ensureProjectSectionState(menu) {
     // Keep the entry compact so it visually matches section row typography.
     searchEntry.set_style('font-size: 12px; min-height: 24px; padding: 1px 8px; margin: 2px 0 6px 0;');
 
-    // Reserve stable vertical space so toggling does not shift project rows.
+    // Collapsed by default; expands only when search is shown.
     const searchSlot = new St.Bin({
         x_expand: true,
         y_expand: false,
         x_align: Clutter.ActorAlign.FILL,
         y_align: Clutter.ActorAlign.START,
     });
-    searchSlot.set_height(32);
+    searchSlot.set_height(0);
     searchSlot.set_child(searchEntry);
 
     const resultsBox = new PopupMenu.PopupMenuSection();
@@ -131,11 +131,13 @@ function _ensureProjectSectionState(menu) {
     searchBtn.connect('clicked', () => {
         state._searchEntry.visible = !state._searchEntry.visible;
         if (state._searchEntry.visible) {
+            state._searchSlot.set_height(32);
             const clutterText = state._searchEntry.clutter_text ?? state._searchEntry.get_clutter_text();
             global.stage?.set_key_focus?.(clutterText);
             return;
         }
 
+        state._searchSlot.set_height(0);
         state._searchQuery = '';
         state._searchEntry.set_text('');
         _renderProjectResults(state);

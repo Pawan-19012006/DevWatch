@@ -131,14 +131,20 @@ export function buildSnapshotSection(menu, snapshots, callbacks, lastWorkspace =
         _hideNaming();
         // Clear persisted text on successful save
         menu._devwatchSnapshotNamingText = null;
-        onSave?.(label);
+        // Immediate UI feedback: show saving state on the Save button
+        saveBtn.label = _('Saving…');
+        saveBtn.reactive = false;
+        // Fire-and-forget the save operation via callback
+        try { onSave?.(label); } catch (_) {}
     });
     entry.clutter_text.connect('activate', () => {
         const label = entry.get_text().trim() || 'auto';
         _hideNaming();
         // Clear persisted text on successful save
         menu._devwatchSnapshotNamingText = null;
-        onSave?.(label);
+        saveBtn.label = _('Saving…');
+        saveBtn.reactive = false;
+        try { onSave?.(label); } catch (_) {}
     });
 
     menu.addMenuItem(sub);
@@ -319,7 +325,15 @@ function _buildRow(snap, isLastWorkspace, onRestore, onDelete) {
             y_align: Clutter.ActorAlign.CENTER,
         });
         delBtn.set_style('margin-left: 8px;');
-        delBtn.connect('clicked', () => onDelete?.(snap.filename));
+        delBtn.connect('clicked', () => {
+            // Optimistic UI: remove the row immediately to avoid blocking
+            try {
+                delBtn.reactive = false;
+                // Destroy item so UI updates instantly
+                item.destroy();
+            } catch (_) {}
+            try { onDelete?.(snap.filename); } catch (_) {}
+        });
         actionBox.add_child(delBtn);
     } else {
         // Spacer for consistent alignment with normal cards having a trash button

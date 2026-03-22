@@ -208,8 +208,9 @@ export class SnapshotManager {
         for (const meta of metas) {
             try {
                 const path = GLib.build_filenamev([this._snapshotDir, meta.filename]);
-                const [, raw] = Gio.File.new_for_path(path).load_contents(null);
-                const data = JSON.parse(new TextDecoder().decode(raw));
+                const file = Gio.File.new_for_path(path);
+                const raw = await _loadContentsAsync(file, this._cancellable);
+                const data = JSON.parse(raw);
                 meta.projectCount = data.projects?.length ?? 0;
                 meta.serviceCount = (data.projects ?? [])
                     .reduce((n, p) => n + (p.services?.length ?? 0), 0);
@@ -236,9 +237,8 @@ export class SnapshotManager {
         const path = GLib.build_filenamev([this._snapshotDir, filename]);
         const file = Gio.File.new_for_path(path);
         try {
-            const [, contents] = file.load_contents(null);
-            const text = new TextDecoder().decode(contents);
-            return JSON.parse(text);
+            const raw = await _loadContentsAsync(file, this._cancellable);
+            return JSON.parse(raw);
         } catch (e) {
             console.error('[DevWatch:SnapshotManager] load() failed:', e.message);
             return null;
@@ -656,7 +656,7 @@ export class SnapshotManager {
         const path = GLib.build_filenamev([this._snapshotDir, filename]);
         const file = Gio.File.new_for_path(path);
         try {
-            file.delete(null);
+            await _deleteFileAsync(file, this._cancellable);
             console.log(`[DevWatch:SnapshotManager] Deleted: ${filename}`);
             return true;
         } catch (e) {
@@ -813,16 +813,35 @@ export class SnapshotManager {
         });
     }
 
-    /**
-     * Remove the oldest snapshot files if we exceed MAX_SNAPSHOTS.
-     */
+    // Remove the oldest snapshot files if we exceed MAX_SNAPSHOTS.
     async _pruneOldSnapshots() {
         const metas = await this.list(); // already sorted newest-first
         const toDelete = metas.slice(MAX_SNAPSHOTS);
         for (const m of toDelete) await this.delete(m.filename);
     }
+
 }
 
+function _loadContentsAsync(file, cancellable) {
+    return new Promise((resolve, reject) => {
+        file.load_contents_async(cancellable, (_src, res) => {
+            try {
+                const [, bytes] = file.load_contents_finish(res);
+                resolve(new TextDecoder().decode(bytes));
+            } catch (e) { reject(e); }
+        });
+    });
+}
+
+function _deleteFileAsync(file, cancellable) {
+    return new Promise((resolve, reject) => {
+        file.delete_async(GLib.PRIORITY_DEFAULT, cancellable, (_src, res) => {
+            try { file.delete_finish(res); resolve(); }
+            catch (e) { reject(e); }
+        });
+    });
+}
+ 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 /**

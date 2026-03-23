@@ -46,7 +46,8 @@ const PROJECT_MARKERS = [
 ];
 
 // Directories that should never be treated as project roots
-const ROOT_STOP_DIRS = new Set(['/', '/home', '/usr', '/opt', '/tmp']);
+// Note: do not include '/home' here — user projects live under /home/<user>.
+const ROOT_STOP_DIRS = new Set(['/', '/usr', '/opt', '/tmp']);
 
 // ─────────────────────────────────────────────────────────────────────────────
 

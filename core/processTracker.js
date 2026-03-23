@@ -57,7 +57,9 @@ const PROJECT_MARKERS = [
 ];
 
 /** Directories that can never be a project root. */
-const ROOT_STOP_DIRS = new Set(['/', '/home', '/usr', '/opt', '/tmp', '/var']);
+// Note: '/home' intentionally omitted so user projects under /home/<user>
+// are discoverable by walking toward the filesystem root.
+const ROOT_STOP_DIRS = new Set(['/', '/usr', '/opt', '/tmp', '/var']);
 
 /** Max cached CWD entries (bounded to avoid unbounded memory growth). */
 const CWD_CACHE_MAX = 512;

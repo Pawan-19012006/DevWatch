@@ -45,11 +45,14 @@ import { ProcessTracker }     from './core/processTracker.js';
 import { PortMonitor }        from './core/portMonitor.js';
 import { ConflictNotifier }   from './core/conflictNotifier.js';
 import { SnapshotManager }      from './core/snapshotManager.js';
+import { FocusTracker }         from './core/focusTracker.js';
 import { buildProjectSection }  from './ui/projectSection.js';
+import { getProjectDurationsByRootToday } from './utils/focusAggregator.js';
 import { buildPortSection }     from './ui/portSection.js';
 import { buildSnapshotSection } from './ui/snapshotSection.js';
 import { BuildDetector }         from './core/buildDetector.js';
 import { buildPerfSection }      from './ui/perfSection.js';
+// Focus timeline UI removed: per-project time will be shown in project dropdown
 import { buildHealthSummary, clearHealthSummary } from './ui/healthSummary.js';
 import { buildAlertsSection } from './ui/alertsSection.js';
 
@@ -72,6 +75,7 @@ export default class DevWatchExtension extends Extension {
         this._portMonitor       = new PortMonitor();
         this._conflictNotifier  = new ConflictNotifier();
         this._snapshotManager   = new SnapshotManager();
+        this._focusTracker      = new FocusTracker();
         this._buildDetector     = new BuildDetector();
 
         // ── GSettings ─────────────────────────────────────────────────
@@ -79,7 +83,10 @@ export default class DevWatchExtension extends Extension {
         // Restart the poll timer live when the user changes the interval
         this._settingsChangedId = this._settings.connect(
             'changed::poll-interval',
-            () => this._restartPollTimer()
+            () => {
+                this._restartPollTimer();
+                this._focusTracker?.setPollIntervalSeconds?.(this._settings.get_int('poll-interval'));
+            }
         );
 
         /** Cached from last _refresh() — used by Save Now button. */
@@ -99,6 +106,7 @@ export default class DevWatchExtension extends Extension {
         this._processTracker.start(this._cancellable);
         this._portMonitor.start(this._cancellable);
         this._snapshotManager.start(this._cancellable);
+        this._focusTracker.start(this._cancellable, this._settings.get_int('poll-interval'));
         this._buildDetector.start(this._cancellable);
 
         // ── Panel Indicator ────────────────────────────────────────────
@@ -241,6 +249,8 @@ export default class DevWatchExtension extends Extension {
 
         this._snapshotManager?.stop();
         this._snapshotManager = null;
+        this._focusTracker?.stop();
+        this._focusTracker = null;
         this._lastProjectMap  = null;
         this._lastPortResult  = null;
         this._snapshots       = null;
@@ -307,6 +317,14 @@ export default class DevWatchExtension extends Extension {
         this._lastProjectMap = projectMap;
         this._lastPortResult = portResult;
 
+        // Passive focus tick (process/port/focused project) on poll cadence.
+        this._focusTracker?.recordTick(
+            projectMap,
+            portResult,
+            this._projectDetector?.getCurrentProject?.() ?? null,
+            this._settings?.get_int('poll-interval') ?? DEFAULT_POLL_INTERVAL_S
+        );
+
         // Fetch snapshot list + last workspace (synchronous read, best-effort)
         try {
             this._snapshots      = await this._snapshotManager.list();
@@ -329,6 +347,7 @@ export default class DevWatchExtension extends Extension {
         const buildResult = this._buildDetector
             ? this._buildDetector.analyse(projectMap)
             : { active: [], history: new Map() };
+        const focusStats = this._focusTracker?.getTodayStats?.() ?? { focusScore: 0, totalActiveMs: 0 };
 
         // Read remaining display preferences
         const showSystemPorts  = this._settings?.get_boolean('show-system-ports') ?? false;
@@ -362,7 +381,7 @@ export default class DevWatchExtension extends Extension {
         const sessionNamingOpen = !!menu._devwatchSnapshotNamingOpen;
 
         if (anySubOpen || projectSearchVisible || sessionNamingOpen) {
-            this._updateStatusDot(projectMap, portResult, buildResult);
+            this._updateStatusDot(projectMap, portResult, buildResult, focusStats.focusScore);
             this._snapshotManager?.saveLastWorkspace(projectMap, portResult)
                 .catch(e => this._logError(e));
             return;
@@ -374,11 +393,12 @@ export default class DevWatchExtension extends Extension {
             projectMap,
             portResult,
             () => { this._indicator.menu.close(); this.openPreferences(); },
-            () => this._stopAllProjects()
+            () => this._stopAllProjects(),
+            { totalActiveMs: focusStats.totalActiveMs }
         );
-        // Problems / Alerts section — shown only when issues exist
-        buildAlertsSection(this._indicator.menu, projectMap, portResult);
-        buildProjectSection(this._indicator.menu, projectMap, portResult);
+
+        const durationByRoot = this._focusTracker?.getDurationsByRootToday?.() ?? getProjectDurationsByRootToday();
+        buildProjectSection(this._indicator.menu, projectMap, portResult, durationByRoot);
         buildPortSection(
             this._indicator.menu,
             portResult,
@@ -398,8 +418,14 @@ export default class DevWatchExtension extends Extension {
         );
         buildPerfSection(this._indicator.menu, buildResult, maxBuildHistory);
 
+        // Removed separate Focus Timeline UI — per-project totals are displayed
+        // inline within the project dropdown (see ui/projectSection.js).
+
+        // Problems section is rendered below Focus Timeline.
+        buildAlertsSection(this._indicator.menu, projectMap, portResult);
+
         // Update status dot colour
-        this._updateStatusDot(projectMap, portResult, buildResult);
+        this._updateStatusDot(projectMap, portResult, buildResult, focusStats.focusScore);
 
         // Auto-save last workspace (fire-and-forget — never blocks the UI)
         this._snapshotManager?.saveLastWorkspace(projectMap, portResult)
@@ -433,10 +459,55 @@ export default class DevWatchExtension extends Extension {
      */
     _saveSnapshot(label = 'auto') {
         if (!this._snapshotManager) return;
+        // Optimistic UI: insert a provisional snapshot into the menu immediately
+        try {
+            const nowIso = (new Date()).toISOString();
+            const projCount = this._lastProjectMap ? this._lastProjectMap.size : 0;
+            const svcCount = this._lastProjectMap ? [...this._lastProjectMap.values()].reduce((n, p) => n + (p.processes?.length || 0), 0) : 0;
+            const tempId = `pending-${Date.now()}`;
+            const provisional = {
+                filename: tempId + '.json',
+                label: label || 'auto',
+                savedAt: nowIso,
+                projectCount: projCount,
+                serviceCount: svcCount,
+                _optimistic: true,
+                _tempId: tempId,
+            };
+            this._snapshots = [provisional, ...(this._snapshots ?? [])];
+            // Re-render snapshot section so user sees their saved session instantly
+            if (this._indicator && this._indicator.menu) {
+                try { buildSnapshotSection(this._indicator.menu, this._snapshots ?? [], {
+                    onSave:    (lbl) => this._saveSnapshot(lbl),
+                    onRestore: fn  => this._restoreSnapshot(fn),
+                    onDelete:  fn  => this._deleteSnapshot(fn),
+                }, this._lastWorkspace ?? null); } catch (_) {}
+            }
+        } catch (_) {}
+
+        // Fire actual save in background; when it resolves replace the provisional entry
         this._snapshotManager
             .save(this._lastProjectMap ?? new Map(), this._lastPortResult ?? { ports: [], newPorts: [] }, label)
-            .then(() => this._refresh())
-            .catch(e => this._logError(e));
+            .then(meta => {
+                // Replace provisional snapshot (match by _optimistic flag or tempId)
+                try {
+                    if (!meta) return this._refresh();
+                    const idx = (this._snapshots ?? []).findIndex(s => s._optimistic || s._tempId);
+                    if (idx >= 0) {
+                        this._snapshots.splice(idx, 1, meta);
+                    } else {
+                        this._snapshots = [meta, ...(this._snapshots ?? [])];
+                    }
+                } catch (_) {}
+                return this._refresh();
+            })
+            .catch(e => {
+                // Remove provisional entry and log the error
+                try {
+                    this._snapshots = (this._snapshots ?? []).filter(s => !s._optimistic && !s._tempId);
+                } catch (_) {}
+                this._logError(e);
+            });
     }
 
     /**
@@ -544,7 +615,8 @@ export default class DevWatchExtension extends Extension {
     _updateStatusDot(
         projectMap,
         portResult     = { ports: [], newPorts: [] },
-        buildResult    = { active: [], history: new Map() }
+        buildResult    = { active: [], history: new Map() },
+        focusScore     = null
     ) {
         if (!this._statusDot) return;
 
@@ -560,6 +632,18 @@ export default class DevWatchExtension extends Extension {
         else if (highCpu || buildingHot) dotClass = 'devwatch-dot-yellow';
 
         this._statusDot.style_class = `devwatch-dot ${dotClass}`;
+
+        const projectCount = projectMap?.size ?? 0;
+        const tooltip = _('DevWatch') + '\n' + _('%d project(s) active').format(projectCount);
+        this._indicator?.set_tooltip_text?.(tooltip);
+    }
+
+    _openTerminalAt(root) {
+        const launcher = new Gio.SubprocessLauncher({ flags: Gio.SubprocessFlags.NONE });
+        if (root) launcher.set_cwd(root);
+        for (const argv of [['gnome-terminal'], ['xterm']]) {
+            try { launcher.spawnv(argv); return; } catch (_) {}
+        }
     }
 
     /**

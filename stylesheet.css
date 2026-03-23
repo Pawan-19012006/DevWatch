@@ -695,6 +695,50 @@
     background-color: rgba(0,0,0,0.25);
 }
 
+/* Search entry inside Running Projects - force dark background and readable placeholder */
+.devwatch-menu .dw-search-entry {
+    background-color: rgba(255,255,255,0.03) !important;
+    border: 1px solid rgba(255,255,255,0.08) !important;
+    color: #e9ecf1 !important;
+}
+.devwatch-menu .dw-search-entry:focus {
+    background-color: rgba(255,255,255,0.04) !important;
+    border-color: rgba(120,174,237,0.28) !important;
+}
+
+/* Ensure placeholder / hint text is visible in dark mode even when shell tries
+ * to apply light-theme placeholder colors. Use both generic entry selectors
+ * and specific DevWatch entry classes. */
+.devwatch-menu entry::placeholder,
+.devwatch-menu .entry::placeholder,
+.devwatch-menu .st-entry::placeholder,
+.devwatch-menu .dw-search-entry::placeholder,
+.devwatch-menu .dw-session-entry::placeholder,
+.devwatch-menu .dw-snap-entry::placeholder {
+    color: rgba(233,236,241,0.58) !important;
+}
+
+/* GNOME Shell entries often render hint text as a StLabel.hint-text child
+ * instead of placeholder pseudo-elements, so style both forms. */
+.devwatch-menu .dw-search-entry StLabel.hint-text,
+.devwatch-menu .dw-snap-entry StLabel.hint-text,
+.devwatch-menu .dw-session-entry StLabel.hint-text,
+.devwatch-menu .dw-search-entry .hint-text,
+.devwatch-menu .dw-snap-entry .hint-text,
+.devwatch-menu .dw-session-entry .hint-text {
+    color: rgba(233,236,241,0.82) !important;
+}
+
+/* Also force the text color for entries to stay bright for readability */
+.devwatch-menu entry,
+.devwatch-menu .entry,
+.devwatch-menu .st-entry,
+.devwatch-menu .dw-search-entry,
+.devwatch-menu .dw-session-entry,
+.devwatch-menu .dw-snap-entry {
+    color: #e9ecf1 !important;
+}
+
 /* Resume — warm amber CTA */
 .dw-session-btn-resume {
     font-size: 11px;

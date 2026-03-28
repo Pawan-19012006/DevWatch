@@ -41,12 +41,18 @@ export function buildSnapshotSection(menu, snapshots, callbacks, lastWorkspace =
     // 'Save' header drifting to the top of the menu).
     const preservedNamingText = menu._devwatchSnapshotNamingText ?? null;
     const preservedNamingOpen = !!menu._devwatchSnapshotNamingOpen;
+    const preservedSubmenuOpen = !!menu._devwatchSnapshotSubmenuOpen;
     // Clear previous snapshot section so we can rebuild deterministically
     clearSnapshotSection(menu);
 
     const sub = new PopupMenu.PopupSubMenuMenuItem('', false);
     menu._devwatchSnapshotSub = sub;
     sub._devwatchSection = SECTION_TAG;
+    sub.menu.connect('open-state-changed', (_menu, open) => {
+        menu._devwatchSnapshotSubmenuOpen = open;
+        if (!open)
+            menu._devwatchSnapshotNamingOpen = false;
+    });
 
     // ── Header row (create once; reuse on subsequent refreshes) ───────────
     // Controls declared in outer scope so handlers can reference them.
@@ -149,6 +155,7 @@ export function buildSnapshotSection(menu, snapshots, callbacks, lastWorkspace =
 
     const _showNaming = () => {
         sub.setSubmenuShown(true);
+        menu._devwatchSnapshotSubmenuOpen = true;
         // Persist the naming-open state so periodic refreshes re-open it
         menu._devwatchSnapshotNamingOpen = true;
         saveBtn.reactive = false;
@@ -167,30 +174,46 @@ export function buildSnapshotSection(menu, snapshots, callbacks, lastWorkspace =
         saveBtn.opacity  = 255;
     };
 
-    if (saveBtn) try { saveBtn.connect('clicked', _showNaming); } catch (_) {}
-    if (cancelBtn) try { cancelBtn.connect('clicked', _hideNaming); } catch (_) {}
-    if (confirmBtn) {
+    if (saveBtn && !saveBtn._devwatchBoundShowNaming) {
         try {
-            confirmBtn.connect('clicked', () => {
-                const label = entry.get_text().trim() || 'auto';
-                // Keep the naming UI open so the user can continue working.
-                // Immediate UI feedback: show saving state on the Save button
-                if (saveBtn) saveBtn.label = _('Saving…');
-                if (saveBtn) saveBtn.reactive = false;
-                // Fire-and-forget the save operation via callback
-                try { onSave?.(label); } catch (_) {}
-            });
+            saveBtn.connect('clicked', _showNaming);
+            saveBtn._devwatchBoundShowNaming = true;
         } catch (_) {}
     }
-    if (entry) {
+    if (cancelBtn && !cancelBtn._devwatchBoundHideNaming) {
         try {
-            entry.clutter_text.connect('activate', () => {
-                const label = entry.get_text().trim() || 'auto';
-                if (saveBtn) saveBtn.label = _('Saving…');
-                if (saveBtn) saveBtn.reactive = false;
-                try { onSave?.(label); } catch (_) {}
-            });
+            cancelBtn.connect('clicked', _hideNaming);
+            cancelBtn._devwatchBoundHideNaming = true;
         } catch (_) {}
+    }
+    if (confirmBtn) {
+        if (!confirmBtn._devwatchBoundConfirmSave) {
+            try {
+                confirmBtn.connect('clicked', () => {
+                    const label = entry.get_text().trim() || 'auto';
+                    // Keep the naming UI open so the user can continue working.
+                    // Immediate UI feedback: show saving state on the Save button
+                    if (saveBtn) saveBtn.label = _('Saving…');
+                    if (saveBtn) saveBtn.reactive = false;
+                    // Fire-and-forget the save operation via callback
+                    try { onSave?.(label); } catch (_) {}
+                });
+                confirmBtn._devwatchBoundConfirmSave = true;
+            } catch (_) {}
+        }
+    }
+    if (entry) {
+        if (!entry._devwatchBoundActivateSave) {
+            try {
+                entry.clutter_text.connect('activate', () => {
+                    const label = entry.get_text().trim() || 'auto';
+                    if (saveBtn) saveBtn.label = _('Saving…');
+                    if (saveBtn) saveBtn.reactive = false;
+                    try { onSave?.(label); } catch (_) {}
+                });
+                entry._devwatchBoundActivateSave = true;
+            } catch (_) {}
+        }
     }
 
     if (headerWasNew) {
@@ -215,7 +238,11 @@ export function buildSnapshotSection(menu, snapshots, callbacks, lastWorkspace =
         menu._devwatchSnapshotNamingOpen = true;
         menu._devwatchNamingItem.visible = true;
         sub.setSubmenuShown(true);
+        menu._devwatchSnapshotSubmenuOpen = true;
         GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => { try { entry.grab_key_focus(); } catch (_) {}; return GLib.SOURCE_REMOVE; });
+    } else if (preservedSubmenuOpen) {
+        sub.setSubmenuShown(true);
+        menu._devwatchSnapshotSubmenuOpen = true;
     }
 
     // ── Session list ────────────────────────────────────────────────────────

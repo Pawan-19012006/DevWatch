@@ -16,7 +16,17 @@ import { _ } from '../utils/i18n.js';
 const SECTION_TAG = 'devwatch-perf';
 const DEFAULT_MAX_HISTORY_ROWS = 8;
 
+function _ensurePerfSectionState(menu) {
+    if (!menu._devwatchPerfSectionState) {
+        menu._devwatchPerfSectionState = {
+            historyExpanded: false,
+        };
+    }
+    return menu._devwatchPerfSectionState;
+}
+
 export function buildPerfSection(menu, buildResult, maxRows = DEFAULT_MAX_HISTORY_ROWS) {
+    const state = _ensurePerfSectionState(menu);
     clearPerfSection(menu);
 
     const active = Array.isArray(buildResult?.active)
@@ -67,6 +77,11 @@ export function buildPerfSection(menu, buildResult, maxRows = DEFAULT_MAX_HISTOR
         const histSub = new PopupMenu.PopupSubMenuMenuItem('', false);
         histSub._devwatchSection = SECTION_TAG;
         const histLabel = new St.Label({ text: _('Recent Builds'), style_class: 'dw-build-hist-hdr' });
+        if (state.historyExpanded)
+            histSub.setSubmenuShown(true);
+        histSub.menu.connect('open-state-changed', (_menu, open) => {
+            state.historyExpanded = open;
+        });
 
         for (const run of shown) {
             histSub.menu.addMenuItem(_buildHistoryRow(run));

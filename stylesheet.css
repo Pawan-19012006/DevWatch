@@ -668,6 +668,7 @@
     margin-right: 12px;
     margin-left: 12px;
     border-radius: 10px;
+    min-height: 62px;
 }
 
 /* Regular session — subtle surface */
@@ -912,4 +913,9 @@
     min-height: 58px;
     padding-top: 4px;
     padding-bottom: 4px;
+}
+
+.devwatch-menu .dw-section-scroll-snapshots .dw-session-card,
+.devwatch-menu .dw-section-scroll-snapshots .dw-session-card-primary {
+    min-height: 62px;
 }

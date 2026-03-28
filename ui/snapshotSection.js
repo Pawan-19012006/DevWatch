@@ -15,7 +15,6 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import { _ } from '../utils/i18n.js';
 
 const SECTION_TAG = 'devwatch-snapshots';
-const SNAPSHOT_SCROLL_THRESHOLD = 3;
 const SNAPSHOT_SCROLL_HEIGHT_PX = 252;
 
 export function buildSnapshotSection(menu, snapshots, callbacks, lastWorkspace = null) {
@@ -230,35 +229,34 @@ export function buildSnapshotSection(menu, snapshots, callbacks, lastWorkspace =
         return;
     }
 
-    let targetMenu = sub.menu;
+    // Always use a dedicated fixed-height viewport for sessions so card rows
+    // never shrink when the overall extension popup becomes constrained.
+    const scrollerItem = new PopupMenu.PopupBaseMenuItem({
+        reactive: false,
+        can_focus: false,
+        activate: false,
+    });
+    scrollerItem.add_style_class_name('dw-section-scroll-item');
+    scrollerItem._devwatchSection = SECTION_TAG;
 
-    if (totalItems > SNAPSHOT_SCROLL_THRESHOLD) {
-        const scrollerItem = new PopupMenu.PopupBaseMenuItem({
-            reactive: false,
-            can_focus: false,
-            activate: false,
-        });
-        scrollerItem.add_style_class_name('dw-section-scroll-item');
-        scrollerItem._devwatchSection = SECTION_TAG;
+    const scrollView = new St.ScrollView({
+        style_class: 'dw-section-scroll dw-section-scroll-snapshots',
+        overlay_scrollbars: false,
+        reactive: true,
+        enable_mouse_scrolling: true,
+        x_expand: true,
+        y_expand: false,
+    });
+    scrollView.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC);
+    scrollView.set_height(SNAPSHOT_SCROLL_HEIGHT_PX);
 
-        const scrollView = new St.ScrollView({
-            style_class: 'dw-section-scroll dw-section-scroll-snapshots',
-            overlay_scrollbars: false,
-            reactive: true,
-            enable_mouse_scrolling: true,
-            x_expand: true,
-            y_expand: false,
-        });
-        scrollView.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC);
-        scrollView.set_height(SNAPSHOT_SCROLL_HEIGHT_PX);
+    const scrollSection = new PopupMenu.PopupMenuSection();
+    scrollView.set_child(scrollSection.actor);
+    scrollerItem.add_child(scrollView);
 
-        const scrollSection = new PopupMenu.PopupMenuSection();
-        scrollView.set_child(scrollSection.actor);
-        scrollerItem.add_child(scrollView);
-        
-        sub.menu.addMenuItem(scrollerItem);
-        targetMenu = scrollSection;
-    }
+    sub.menu.addMenuItem(scrollerItem);
+
+    let targetMenu = scrollSection;
 
     if (lastWorkspace) {
         const item = _buildRow(lastWorkspace, true, onRestore, onDelete);

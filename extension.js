@@ -380,14 +380,20 @@ export default class DevWatchExtension extends Extension {
         const showSystemPorts  = this._settings?.get_boolean('show-system-ports') ?? false;
         const maxBuildHistory  = this._settings?.get_int('max-build-history') ?? 8;
 
-        // If the Sessions naming input is open, avoid full rebuilds for this
-        // tick so the user's typed text/focus remains stable.
+        // If any section submenu is open, avoid rebuilds for this tick so
+        // open dropdowns never auto-collapse during background polling.
         const menu = this._indicator.menu;
         const sessionNamingOpen = !!menu._devwatchSnapshotNamingOpen;
+        const projectState = menu._devwatchProjectSectionState;
+        const anyProjectOpen = !!(projectState?._expandedProjectKeys && projectState._expandedProjectKeys.size > 0);
+        const sessionsOpen = !!menu._devwatchSnapshotSubmenuOpen;
+        const buildsOpen = !!menu._devwatchPerfSectionState?.historyExpanded;
+        const freezeSectionRebuild = sessionNamingOpen || anyProjectOpen || sessionsOpen || buildsOpen;
 
-        // Keep data/live project detection flowing even when search/submenus
-        // are open. Only freeze when session naming is active.
-        if (sessionNamingOpen) {
+        // Keep scans and health status updates running, but freeze section
+        // re-render while any dropdown is open. This guarantees dropdowns
+        // only close when the user explicitly toggles their close arrow.
+        if (freezeSectionRebuild) {
             this._updateStatusDot(projectMap, portResult, buildResult, focusStats.focusScore);
             this._snapshotManager?.saveLastWorkspace(projectMap, portResult)
                 .catch(e => this._logError(e));

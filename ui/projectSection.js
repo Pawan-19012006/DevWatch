@@ -121,6 +121,7 @@ function _ensureProjectSectionState(menu) {
         _projectMap: null,
         _portResult: null,
         _pidToPort: new Map(),
+        _expandedProjectKeys: new Set(),
         _titleItem: titleItem,
         _titleLabel: titleLabel,
         _containerItem: containerItem,
@@ -184,6 +185,11 @@ function _renderProjectResults(state) {
     }
 
     const projects = [...projectMap.values()].sort((a, b) => b.totalCpuPercent - a.totalCpuPercent);
+    const activeKeys = new Set(projects.map(_projectStateKey).filter(Boolean));
+    for (const key of [...state._expandedProjectKeys]) {
+        if (!activeKeys.has(key))
+            state._expandedProjectKeys.delete(key);
+    }
     const filtered = projects.filter(p => (p.name || '').toLowerCase().includes(state._searchQuery));
 
     if (filtered.length === 0) {
@@ -215,7 +221,7 @@ function _renderProjectResults(state) {
 
         const section = new PopupMenu.PopupMenuSection();
         for (const project of filtered) {
-            const item = _buildProjectRow(project, state._pidToPort, scrollView, state._durationByRoot);
+            const item = _buildProjectRow(project, state._pidToPort, scrollView, state._durationByRoot, state._expandedProjectKeys);
             section.addMenuItem(item);
             if (item._devwatchHeader) {
                 item.label.get_parent().insert_child_above(item._devwatchHeader, item.label);
@@ -230,7 +236,7 @@ function _renderProjectResults(state) {
     }
 
     for (const project of filtered) {
-        const item = _buildProjectRow(project, state._pidToPort, null, state._durationByRoot);
+        const item = _buildProjectRow(project, state._pidToPort, null, state._durationByRoot, state._expandedProjectKeys);
         state._resultsBox.addMenuItem(item);
         if (item._devwatchHeader) {
             item.label.get_parent().insert_child_above(item._devwatchHeader, item.label);
@@ -282,12 +288,21 @@ export function clearProjectSection(menu) {
 
 // ── Row builders ───────────────────────────────────────────────────────────────
 
-function _buildProjectRow(project, pidToPort, sectionScrollView, durationByRoot = new Map()) {
+function _buildProjectRow(project, pidToPort, sectionScrollView, durationByRoot = new Map(), expandedProjectKeys = new Set()) {
     const sub = new PopupMenu.PopupSubMenuMenuItem('', true);
     sub.add_style_class_name('dw-project-row-item');
     sub.label.text = '';
+    const stateKey = _projectStateKey(project);
+    if (stateKey && expandedProjectKeys.has(stateKey))
+        sub.setSubmenuShown(true);
+    sub.menu.connect('open-state-changed', (_menu, open) => {
+        if (!stateKey) return;
+        if (open) expandedProjectKeys.add(stateKey);
+        else expandedProjectKeys.delete(stateKey);
+    });
     if (sectionScrollView)
         _wireSubmenuToParentScroll(sub, sectionScrollView);
+
     // Card-style container: soft background + left indent for the service list
     sub.menu.actor.set_style(
         'background-color: rgba(255,255,255,0.05); border-radius: 8px;' +
@@ -374,6 +389,14 @@ function _buildProjectRow(project, pidToPort, sectionScrollView, durationByRoot 
     sub.menu.addMenuItem(actionsItem);
 
     return sub;
+}
+
+function _projectStateKey(project) {
+    if (project?.root)
+        return `root:${project.root}`;
+    if (project?.name)
+        return `name:${project.name}`;
+    return null;
 }
 
 function _buildServiceRow(svc) {

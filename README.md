@@ -42,13 +42,16 @@ No terminal commands. No window switching. Everything in one dropdown.
 
 ## How It Works
 
-DevWatch runs in the background and:
+DevWatch runs locally in the background and:
 
-1. **Detects your projects** — reads the focused window's working directory and walks up to the nearest `.git` root
-2. **Scans processes** — reads `/proc` every 10 seconds and groups processes by project
-3. **Monitors ports** — parses `ss -tulnp` output and maps each port back to its owning project
-4. **Tracks builds** — detects 35+ build tools (npm, cargo, make, go, etc.) and records duration, peak CPU, and peak RAM
-5. **Auto-saves your workspace** — every refresh, DevWatch silently saves a "Last Workspace" snapshot so you can resume after a reboot
+1. **Resolves project roots** — uses process CWDs from `/proc` and maps them to a git root (or known project markers like `package.json`, `go.mod`, `pyproject.toml`, etc.)
+2. **Tracks focused project context** — watches focused-window changes, reads that window PID's CWD, and updates context immediately
+3. **Scans on a live cadence** — refreshes on the configured poll interval (default 10s), plus immediate refresh on menu-open and focused-project changes
+4. **Monitors listening ports** — parses `ss -Htulnp`, links ports to process PIDs and project roots, and flags newly occupied dev ports
+5. **Tracks build activity** — detects 35+ build tool processes and records elapsed time, peak CPU, and peak RAM (history is persisted)
+6. **Auto-saves last workspace** — writes `_last_workspace_.json` during refreshes (when active projects exist) so sessions can be resumed later
+
+While interactive submenus are open (project cards, sessions, recent builds), DevWatch keeps scanning and status updates running but avoids rebuilding those sections so open UI state does not collapse unexpectedly.
 
 Everything runs **locally with zero network access**. No cloud, no telemetry, no elevated privileges.
 
@@ -62,7 +65,7 @@ When you click the **DevWatch** button in your GNOME panel, the dropdown shows:
 
 ![Header Bar](docs/screenshots/header-card.png)
 
-- **Stats line** — live count of projects, ports, and total RAM
+- **Stats line** — live count of projects, dev ports, and total RAM
 - **Stop All Projects** — kills every process in every detected project
 - **⚙ Settings** — opens the preferences window
 
@@ -83,14 +86,14 @@ Each project is an expandable card:
 - **Dev ports** highlighted with a colored dot (3000, 5173, 8080, etc.)
 - **Project name** shown when a port is linked to a project
 - **Stop** button kills the process on that port
-- **Runtime** shows how long a port has been open
+- **Runtime** shows how long a port has been open (since DevWatch first observed it)
 
 ### 📷 Sessions
 
 ![Sessions](docs/screenshots/session-workspace.png)
 
 - **Save** — name and save the current workspace
-- **Last Workspace** — automatically saved every refresh (survives reboots)
+- **Last Workspace** — automatically updated during refreshes while projects are active (survives reboots)
 - **Resume** — reopens terminals at each saved project root, relaunches services, opens editors
 - **Delete** — remove a saved session
 
@@ -107,11 +110,8 @@ Each project is an expandable card:
 
 Only appears when issues are detected:
 
-```
-Problems
-  ⚠ trackitte  using 3.2 GB RAM
-  ⚠ backend  CPU at 92%
-```
+- `frontend memory usage is high (2.4 GB).`
+- `backend CPU usage is high (91%).`
 
 ### 🔴🟡🟢 Status Dot
 
@@ -120,8 +120,8 @@ The colored dot in the panel gives you a health check at a glance:
 | Color | Meaning |
 |---|---|
 | 🟢 Green | Everything healthy |
-| 🟡 Yellow | High CPU (>80%) or a build pushing above 90% |
-| 🔴 Red | Port conflict detected |
+| 🟡 Yellow | High project CPU (>80%) or an active build peaking above 90% CPU |
+| 🔴 Red | A newly occupied dev port was detected (port conflict signal) |
 
 ---
 
@@ -136,6 +136,8 @@ gnome-extensions prefs devwatch@github.io
 | Page | Setting | Default | Description |
 |---|---|---|---|
 | **General** | Poll interval | 10s | How often DevWatch scans (5–60 seconds). Changes apply live. |
+| **General** | Panel position | Right | Place DevWatch in the left, center, or right top-bar box |
+| **General** | Panel index | 0 | Ordering index (0–30) within the selected top-bar box |
 | **Ports** | Show system ports | Off | Show all listening ports, not just dev ports |
 | **Ports** | Port conflict notifications | On | Desktop notification when a dev port is newly occupied |
 | **Performance** | Max history rows | 8 | Number of completed builds shown (1–20) |
@@ -274,7 +276,7 @@ All data stays **local on your machine**.
 ```
 ~/.local/share/devwatch/
 ├── snapshots/                  ← Named session snapshots (JSON)
-├── _last_workspace_.json       ← Auto-saved workspace (updated every refresh)
+├── _last_workspace_.json       ← Auto-saved workspace (updated while projects are active)
 ├── build_history.json          ← Build performance history
 └── focus_log_YYYY-MM-DD.json   ← Passive focus ticks (kept for 7 days)
 ```

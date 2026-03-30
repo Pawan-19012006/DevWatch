@@ -10,6 +10,10 @@
   <a href="https://www.linux.org"><img src="https://img.shields.io/badge/Platform-Linux-orange.svg" alt="Linux"></a>
 </p>
 
+## Demo Video
+
+Watch DevWatch in action: https://www.youtube.com/watch?v=92HAfwx13kc
+
 ---
 
 ## What is DevWatch?

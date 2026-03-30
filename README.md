@@ -12,7 +12,15 @@
 
 ## Demo Video
 
-Watch DevWatch in action: https://www.youtube.com/watch?v=92HAfwx13kc
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=92HAfwx13kc" target="_blank" rel="noopener noreferrer">
+    <img src="https://img.youtube.com/vi/92HAfwx13kc/maxresdefault.jpg" alt="Watch DevWatch Demo" width="720" />
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=92HAfwx13kc"><img src="https://img.shields.io/badge/Watch%20Demo-YouTube-red?logo=youtube&logoColor=white" alt="Watch Demo on YouTube"></a>
+</p>
 
 ---
 

@@ -415,8 +415,9 @@ function _buildServiceRow(svc) {
         }));
     }
 
-    // Combined "Python Server · Port 8000" — single label avoids layout gaps
-    const text = svc.port ? `${svc.displayName}  ·  Port ${svc.port}` : svc.displayName;
+    // Always include PID so similarly named services are distinguishable.
+    const baseText = `${svc.displayName} (${svc.pid})`;
+    const text = svc.port ? `${baseText}  ·  Port ${svc.port}` : baseText;
     row.add_child(new St.Label({
         text,
         style_class: 'dw-service-row',
@@ -447,6 +448,7 @@ function _toServices(project, pidToPort) {
     for (const p of withPort) {
         result.push({
             displayName: _toServiceLabel(p.name),
+            pid: p.pid,
             port: pidToPort.get(p.pid),
             stateSymbol: _stateSymbol(p.state),
             stateClass:  _stateClass(p.state),
@@ -463,6 +465,7 @@ function _toServices(project, pidToPort) {
     for (const p of rest) {
         result.push({
             displayName: _toServiceLabel(p.name),
+            pid: p.pid,
             port: null,
             stateSymbol: _stateSymbol(p.state),
             stateClass:  _stateClass(p.state),

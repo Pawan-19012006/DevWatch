@@ -38,6 +38,26 @@ Click **DevWatch** in your panel and instantly see:
 
 No terminal commands. No window switching. Everything in one dropdown.
 
+<br>
+
+### 🌍 Coming Soon to Your Favorite Platform
+
+DevWatch is currently optimized for GNOME Shell, but we are actively bringing this exact same developer intelligence to other platforms! 
+
+<p align="center">
+  <a href="https://github.com/Adithya-Balan/DevWatch/releases"><img src="https://img.shields.io/badge/macOS-Coming%20Soon-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS Coming Soon" /></a>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="https://github.com/Adithya-Balan/DevWatch/releases"><img src="https://img.shields.io/badge/Windows-Coming%20Soon-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows Coming Soon" /></a>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="https://github.com/Adithya-Balan/DevWatch/releases"><img src="https://img.shields.io/badge/KDE%20Plasma-Coming%20Soon-1D99F3?style=for-the-badge&logo=kde&logoColor=white" alt="KDE Plasma Coming Soon" /></a>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="https://github.com/Adithya-Balan/DevWatch/releases"><img src="https://img.shields.io/badge/Other%20Linux-Coming%20Soon-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Other Linux DEs Coming Soon" /></a>
+</p>
+
+<p align="center">
+  <em>⭐ <a href="https://github.com/Adithya-Balan/DevWatch"><strong>Star the repo</strong></a> or watch our releases to stay updated on our multi-platform journey!</em>
+</p>
+
 ---
 
 ## How It Works
